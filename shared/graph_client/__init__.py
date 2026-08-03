@@ -766,6 +766,64 @@ class ProductionGraphClient:
         return self._run(sql, [self._s("linked_entity_id", "STRING", linked_entity_id)])
 
     # -----------------------------------------------------------------------
+    # STORYBOARDS
+    # -----------------------------------------------------------------------
+
+    def upsert_storyboard(self, record: dict) -> None:
+        """
+        Insert or update a storyboard record in the Production Graph.
+
+        Args:
+            record: Dict with fields matching the ``storyboards`` table schema.
+                    Must include ``storyboard_id`` and ``scene_id``.
+
+        Raises:
+            GraphClientError: If the BigQuery MERGE operation fails.
+        """
+        sql = f"""
+        MERGE {self._table('storyboards')} AS target
+        USING (SELECT @storyboard_id AS storyboard_id) AS source
+        ON target.storyboard_id = source.storyboard_id
+        WHEN MATCHED THEN UPDATE SET
+            scene_id    = @scene_id,
+            gs_uri      = @gs_uri,
+            prompt_used = @prompt_used,
+            version     = target.version + 1,
+            updated_at  = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT
+            (storyboard_id, scene_id, gs_uri, prompt_used, version, updated_at)
+        VALUES
+            (@storyboard_id, @scene_id, @gs_uri, @prompt_used, 1, CURRENT_TIMESTAMP())
+        """
+        self._run(sql, [
+            self._s("storyboard_id", "STRING", record.get("storyboard_id")),
+            self._s("scene_id",      "STRING", record.get("scene_id")),
+            self._s("gs_uri",        "STRING", record.get("gs_uri")),
+            self._s("prompt_used",   "STRING", record.get("prompt_used")),
+        ])
+
+    def get_storyboard(self, storyboard_id: str) -> dict | None:
+        """
+        Fetch a single storyboard record by ID.
+
+        Args:
+            storyboard_id: The storyboard's unique identifier.
+
+        Returns:
+            A dict of the storyboard record, or ``None`` if not found.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('storyboards')}
+        WHERE storyboard_id = @storyboard_id
+        LIMIT 1
+        """
+        rows = self._run(sql, [self._s("storyboard_id", "STRING", storyboard_id)])
+        return rows[0] if rows else None
+
+    # -----------------------------------------------------------------------
     # EVENTS (append-only audit log)
     # -----------------------------------------------------------------------
 
