@@ -646,6 +646,26 @@ class ProductionGraphClient:
         """
         return self._run(sql, [])
 
+    def get_schedule_blocks_for_scene(self, scene_id: str) -> list[dict]:
+        """
+        Return all schedule block records for a given scene_id.
+
+        Args:
+            scene_id: The unique ID of the scene.
+
+        Returns:
+            List of schedule block dicts matching the scene_id.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('schedule_blocks')}
+        WHERE scene_id = @scene_id
+        ORDER BY day_index ASC
+        """
+        return self._run(sql, [self._s("scene_id", "STRING", scene_id)])
+
     # -----------------------------------------------------------------------
     # RISK FLAGS
     # -----------------------------------------------------------------------
