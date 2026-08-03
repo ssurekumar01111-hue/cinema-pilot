@@ -724,6 +724,27 @@ class ProductionGraphClient:
         """
         return self._run(sql, [])
 
+    def get_unmitigated_risk_flags_for_entity(self, linked_entity_id: str) -> list[dict]:
+        """
+        Return unmitigated risk flags (where mitigation is empty or null) for a given linked_entity_id.
+
+        Args:
+            linked_entity_id: The ID of the linked entity (e.g. a location_id or scene_id).
+
+        Returns:
+            List of risk flag dicts matching the criteria.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('risk_flags')}
+        WHERE linked_entity_id = @linked_entity_id
+          AND (mitigation IS NULL OR TRIM(mitigation) = '')
+        ORDER BY severity DESC, updated_at DESC
+        """
+        return self._run(sql, [self._s("linked_entity_id", "STRING", linked_entity_id)])
+
     # -----------------------------------------------------------------------
     # EVENTS (append-only audit log)
     # -----------------------------------------------------------------------
