@@ -200,11 +200,182 @@ def mitigate_risks(location_id: str) -> list[dict[str, Any]]:
     return updated_records
 
 
+import httpx
+from google.adk.tools.mcp_tool import (
+    McpToolset,
+    StreamableHTTPConnectionParams,
+)
+
+# ---------------------------------------------------------------------------
+# Grafana MCP Helper
+# ---------------------------------------------------------------------------
+
+_TOKEN_FILE = Path.home() / ".cinemapilot" / "grafana_mcp_token.json"
+
+
+def get_grafana_toolset() -> McpToolset:
+    """
+    Constructs an ADK McpToolset connected to the Grafana Cloud MCP server.
+    Loads cached OAuth 2.1 Bearer token from ~/.cinemapilot/grafana_mcp_token.json.
+    """
+    if not _TOKEN_FILE.exists():
+        raise RuntimeError(
+            f"Grafana MCP token file not found at {_TOKEN_FILE}. "
+            "Please run `python infra/grafana_oauth_bootstrap.py` first to authenticate."
+        )
+
+    try:
+        token_data = json.loads(_TOKEN_FILE.read_text(encoding="utf-8"))
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise ValueError("Token file missing 'access_token' field.")
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to read Grafana MCP token from {_TOKEN_FILE}: {exc}. "
+            "Please re-run `python infra/grafana_oauth_bootstrap.py`."
+        ) from exc
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "X-Grafana-URL": "https://daringhamster1557.grafana.net",
+    }
+
+    connection_params = StreamableHTTPConnectionParams(
+        url="https://mcp.grafana.com/mcp",
+        headers=headers,
+    )
+
+    return McpToolset(
+        connection_params=connection_params,
+        tool_filter=["list_incidents", "create_incident"],
+    )
+
+
+async def escalate_risk_to_grafana(risk_flag_id: str) -> dict:
+    """
+    Escalate a high-severity, mitigated risk flag to Grafana Cloud Incidents via MCP.
+
+    Args:
+        risk_flag_id: Unique ID of the risk flag record.
+
+    Returns:
+        Dict containing Grafana incident details or status.
+    """
+    graph = ProductionGraphClient()
+
+    # a. Fetch risk flag record
+    risk_flag = graph.get_risk_flag(risk_flag_id)
+    if not risk_flag:
+        raise ValueError(f"Risk flag '{risk_flag_id}' not found in Production Graph.")
+
+    severity = str(risk_flag.get("severity", "")).lower()
+    mitigation = str(risk_flag.get("mitigation", "")).strip()
+
+    # b. Only proceed if severity == "high" AND mitigation is not empty
+    if severity != "high" or not mitigation:
+        print(f"[risk_agent] Skipping escalation for '{risk_flag_id}': severity='{severity}', has_mitigation={bool(mitigation)}")
+        return {"status": "skipped", "reason": "Not high severity or unmitigated"}
+
+    # Initialize Grafana MCP toolset
+    toolset = get_grafana_toolset()
+    tools = await toolset.get_tools()
+    tools_by_name = {t.name: t for t in tools}
+
+    list_incidents_tool = tools_by_name.get("list_incidents")
+    create_incident_tool = tools_by_name.get("create_incident")
+
+    # c. Check if incident already exists referencing risk_flag_id
+    if list_incidents_tool:
+        try:
+            incidents_response = await list_incidents_tool._run_async_impl(
+                args={"limit": 20},
+                tool_context=None,
+                credential=None,
+            )
+            # Parse text response content from MCP tool
+            content_list = incidents_response.get("content", [])
+            for c in content_list:
+                if c.get("type") == "text":
+                    try:
+                        inc_data = json.loads(c.get("text", "{}"))
+                        incidents = inc_data.get("incidents", [])
+                        for inc in incidents:
+                            inc_title = str(inc.get("title", ""))
+                            inc_desc = str(inc.get("description", ""))
+                            if risk_flag_id in inc_title or risk_flag_id in inc_desc:
+                                inc_url = inc.get("url") or inc.get("html_url") or str(inc.get("id", ""))
+                                print(f"[risk_agent] Existing Grafana incident found for {risk_flag_id}: {inc_url}")
+                                return {"status": "already_exists", "grafana_incident_url": inc_url, "incident": inc}
+                    except json.JSONDecodeError:
+                        pass
+        except Exception as exc:
+            print(f"[risk_agent] Warning: list_incidents check failed ({exc}). Proceeding to create check.")
+
+    # Check if we already stored a URL locally
+    existing_url = risk_flag.get("grafana_incident_url")
+    if existing_url:
+        print(f"[risk_agent] Existing incident URL recorded in graph: {existing_url}")
+        return {"status": "already_exists", "grafana_incident_url": existing_url}
+
+    # d. Create new Grafana incident
+    linked_entity_id = risk_flag.get("linked_entity_id", "unknown")
+    description_text = risk_flag.get("description", "")
+    
+    title = f"CinemaPilot Risk: {linked_entity_id} — {severity.upper()}"
+    full_description = (
+        f"Risk Flag ID: {risk_flag_id}\n"
+        f"Linked Entity: {linked_entity_id}\n"
+        f"Severity: {severity.upper()}\n\n"
+        f"Risk Description:\n{description_text}\n\n"
+        f"Mitigation Strategy:\n{mitigation}"
+    )
+
+    if not create_incident_tool:
+        raise RuntimeError("Grafana MCP tool 'create_incident' is not available.")
+
+    incident_response = await create_incident_tool._run_async_impl(
+        args={
+            "title": title,
+            "roomPrefix": "cinemapilot",
+        },
+        tool_context=None,
+        credential=None,
+    )
+
+    incident_url = ""
+    content_list = incident_response.get("content", [])
+    for c in content_list:
+        if c.get("type") == "text":
+            text = c.get("text", "")
+            if "url" in text or "http" in text:
+                incident_url = text
+
+    # e. Store incident URL back onto risk_flags record
+    updated_record = dict(risk_flag)
+    updated_record["grafana_incident_url"] = incident_url
+    graph.upsert_risk_flag(updated_record)
+
+    # f. Log audit event
+    graph.log_event(
+        actor_agent="risk_agent",
+        entity_type="risk_flag",
+        entity_id=risk_flag_id,
+        before_state={"grafana_incident_url": None},
+        after_state={"grafana_incident_url": incident_url},
+        triggered_agents=[],
+    )
+
+    print(f"[risk_agent] Escalation result for {risk_flag_id}: {incident_response}")
+    return incident_response
+
+
 # ---------------------------------------------------------------------------
 # Standalone Test Harness
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    import asyncio
+
     test_location_id = "loc_sunset_beach"
 
     print("=" * 70)
@@ -224,3 +395,16 @@ if __name__ == "__main__":
         print(r.get('mitigation'))
         print("-" * 70)
         print()
+
+    print("=" * 70)
+    print("  Testing Grafana Risk Escalation")
+    print("=" * 70)
+    test_flag_id = "rf_loc_loc_sunset_beach"
+    try:
+        esc_res = asyncio.run(escalate_risk_to_grafana(test_flag_id))
+        print(f"\nEscalation Result for {test_flag_id}:")
+        print(json.dumps(esc_res, indent=2, default=str))
+    except Exception as e:
+        print(f"\nEscalation Execution Error: {e}")
+
+

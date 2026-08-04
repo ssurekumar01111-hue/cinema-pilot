@@ -726,25 +726,27 @@ class ProductionGraphClient:
         USING (SELECT @risk_flag_id AS risk_flag_id) AS source
         ON target.risk_flag_id = source.risk_flag_id
         WHEN MATCHED THEN UPDATE SET
-            linked_entity_id = @linked_entity_id,
-            severity         = @severity,
-            description      = @description,
-            mitigation       = @mitigation,
-            version          = target.version + 1,
-            updated_at       = CURRENT_TIMESTAMP()
+            linked_entity_id     = @linked_entity_id,
+            severity             = @severity,
+            description          = @description,
+            mitigation           = @mitigation,
+            grafana_incident_url = @grafana_incident_url,
+            version              = target.version + 1,
+            updated_at           = CURRENT_TIMESTAMP()
         WHEN NOT MATCHED THEN INSERT
             (risk_flag_id, linked_entity_id, severity,
-             description, mitigation, version, updated_at)
+             description, mitigation, grafana_incident_url, version, updated_at)
         VALUES
             (@risk_flag_id, @linked_entity_id, @severity,
-             @description, @mitigation, 1, CURRENT_TIMESTAMP())
+             @description, @mitigation, @grafana_incident_url, 1, CURRENT_TIMESTAMP())
         """
         self._run(sql, [
-            self._s("risk_flag_id",     "STRING", record.get("risk_flag_id")),
-            self._s("linked_entity_id", "STRING", record.get("linked_entity_id")),
-            self._s("severity",         "STRING", record.get("severity")),
-            self._s("description",      "STRING", record.get("description")),
-            self._s("mitigation",       "STRING", record.get("mitigation")),
+            self._s("risk_flag_id",          "STRING", record.get("risk_flag_id")),
+            self._s("linked_entity_id",      "STRING", record.get("linked_entity_id")),
+            self._s("severity",              "STRING", record.get("severity")),
+            self._s("description",           "STRING", record.get("description")),
+            self._s("mitigation",            "STRING", record.get("mitigation")),
+            self._s("grafana_incident_url",  "STRING", record.get("grafana_incident_url")),
         ])
 
     def get_risk_flag(self, risk_flag_id: str) -> dict | None:
