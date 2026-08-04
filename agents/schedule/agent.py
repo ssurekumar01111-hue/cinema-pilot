@@ -68,10 +68,10 @@ Data Provided:
 
 Instructions:
 1. Determine the estimated duration in minutes (`duration_minutes`, typically between 60 and 480 minutes depending on complexity).
-2. Assign a recommended shoot day index (`day_index`, integer >= 1 based on timeline position or logistics).
+2. Assign a recommended shoot day index (`day_index`, integer >= 1). By default, `day_index` should match the scene's Timeline Position ({timeline_position}). Only assign a different `day_index` if specific location logistics or constraints (e.g. grouping scenes at the same location or weather/tide window batching) explicitly justify it. If `day_index` differs from Timeline Position ({timeline_position}), you MUST explicitly state the justification in the `reasoning` field.
 3. List specific scheduling constraints (`constraints` array of strings).
    CRITICAL: Constraints must cite ONLY real factors present in the Logistics Notes or location properties (such as tide-dependent access windows, filming permit timing, lack of on-site power, or weather sensitivity). Do NOT invent call times, fictional union rules, or unlisted equipment.
-4. Provide a brief 1-2 sentence reasoning (`reasoning`) explaining the schedule choices.
+4. Provide a brief 1-2 sentence reasoning (`reasoning`) explaining the schedule choices and explicitly explaining any divergence of `day_index` from Timeline Position.
 5. Return ONLY valid JSON matching this schema:
 {{
   "duration_minutes": <int>,
@@ -80,6 +80,7 @@ Instructions:
   "reasoning": <string, 1-2 sentences>
 }}
 """
+
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +150,17 @@ def reschedule_shoot(scene_id: str) -> dict[str, Any]:
     existing_block_id = f"sb_{scene_id}"
     previous_block = graph.get_schedule_block(existing_block_id)
 
+    def _sanitize_for_json(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return {k: _sanitize_for_json(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [_sanitize_for_json(v) for v in obj]
+        elif hasattr(obj, "isoformat"):
+            return obj.isoformat()
+        return obj
+
+    cleaned_blocks = _sanitize_for_json(existing_blocks) if existing_blocks else "None"
+
     # 3. Call Gemini for schedule calculation
     client = _build_gemini_client()
     prompt = SCHEDULE_PROMPT.format(
@@ -162,7 +174,7 @@ def reschedule_shoot(scene_id: str) -> dict[str, Any]:
         num_characters=len(character_ids),
         num_props=len(prop_ids),
         props_list=", ".join(prop_ids) if prop_ids else "None",
-        existing_blocks=json.dumps(existing_blocks) if existing_blocks else "None",
+        existing_blocks=json.dumps(cleaned_blocks) if isinstance(cleaned_blocks, (dict, list)) else cleaned_blocks,
     )
 
     try:
@@ -185,9 +197,25 @@ def reschedule_shoot(scene_id: str) -> dict[str, Any]:
         raise ValueError(f"Failed to parse Gemini JSON for {scene_id}: {exc}\nRaw: {response.text}") from exc
 
     duration_minutes = int(res.get("duration_minutes", 240))
-    day_index = int(res.get("day_index", scene.get("timeline_position", 1)))
+    raw_day = res.get("day_index")
+    timeline_pos = int(scene.get("timeline_position", scene.get("scene_number", 1)))
+
+    try:
+        parsed_day = int(raw_day)
+        if parsed_day < 1:
+            print(f"[schedule_agent] WARNING: Invalid day_index ({parsed_day}) < 1 returned. Defaulting to timeline_position ({timeline_pos}).")
+            day_index = timeline_pos
+        else:
+            day_index = parsed_day
+    except (TypeError, ValueError):
+        print(f"[schedule_agent] WARNING: Non-integer day_index ({raw_day}) returned. Defaulting to timeline_position ({timeline_pos}).")
+        day_index = timeline_pos
+
     constraints = [str(c).strip() for c in res.get("constraints", []) if c]
     reasoning = str(res.get("reasoning", "")).strip()
+
+    if day_index != timeline_pos:
+        print(f"[schedule_agent] LOG: day_index ({day_index}) diverges from timeline_position ({timeline_pos}). Stated reasoning: '{reasoning}'")
 
     # 4. Upsert Schedule Block
     schedule_block_record = {
