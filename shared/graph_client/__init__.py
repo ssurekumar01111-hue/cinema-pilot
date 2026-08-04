@@ -332,6 +332,26 @@ class ProductionGraphClient:
         sql = f"SELECT * FROM {self._table('characters')} ORDER BY name ASC"
         return self._run(sql, [])
 
+    def get_scenes_for_character(self, character_id: str) -> list[dict]:
+        """
+        Return all scene records where the given character_id is present in character_ids.
+
+        Args:
+            character_id: The unique ID of the character.
+
+        Returns:
+            List of scene dicts matching the criteria, ordered by timeline position.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('scenes')}
+        WHERE @character_id IN UNNEST(character_ids)
+        ORDER BY timeline_position ASC
+        """
+        return self._run(sql, [self._s("character_id", "STRING", character_id)])
+
     # -----------------------------------------------------------------------
     # LOCATIONS
     # -----------------------------------------------------------------------
@@ -945,6 +965,68 @@ class ProductionGraphClient:
         LIMIT 1
         """
         rows = self._run(sql, [self._s("director_note_id", "STRING", director_note_id)])
+        return rows[0] if rows else None
+
+    # -----------------------------------------------------------------------
+    # CHARACTER SHEETS
+    # -----------------------------------------------------------------------
+
+    def upsert_character_sheet(self, record: dict) -> None:
+        """
+        Insert or update a character sheet record in the Production Graph.
+
+        Args:
+            record: Dict with fields matching the ``character_sheets`` table schema.
+                    Must include ``character_sheet_id`` and ``character_id``.
+
+        Raises:
+            GraphClientError: If the BigQuery MERGE operation fails.
+        """
+        sql = f"""
+        MERGE {self._table('character_sheets')} AS target
+        USING (SELECT @character_sheet_id AS character_sheet_id) AS source
+        ON target.character_sheet_id = source.character_sheet_id
+        WHEN MATCHED THEN UPDATE SET
+            character_id           = @character_id,
+            summary                = @summary,
+            personality_notes      = @personality_notes,
+            costume_considerations = @costume_considerations,
+            scene_count            = @scene_count,
+            version                = target.version + 1,
+            updated_at             = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT
+            (character_sheet_id, character_id, summary, personality_notes, costume_considerations, scene_count, version, updated_at)
+        VALUES
+            (@character_sheet_id, @character_id, @summary, @personality_notes, @costume_considerations, @scene_count, 1, CURRENT_TIMESTAMP())
+        """
+        self._run(sql, [
+            self._s("character_sheet_id",     "STRING", record.get("character_sheet_id")),
+            self._s("character_id",           "STRING", record.get("character_id")),
+            self._s("summary",                "STRING", record.get("summary")),
+            self._s("personality_notes",      "STRING", record.get("personality_notes")),
+            self._s("costume_considerations", "STRING", record.get("costume_considerations")),
+            self._s("scene_count",            "INT64",  record.get("scene_count")),
+        ])
+
+    def get_character_sheet(self, character_sheet_id: str) -> dict | None:
+        """
+        Fetch a single character sheet record by ID.
+
+        Args:
+            character_sheet_id: The character sheet's unique identifier.
+
+        Returns:
+            A dict of the character sheet record, or ``None`` if not found.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('character_sheets')}
+        WHERE character_sheet_id = @character_sheet_id
+        LIMIT 1
+        """
+        rows = self._run(sql, [self._s("character_sheet_id", "STRING", character_sheet_id)])
         return rows[0] if rows else None
 
     # -----------------------------------------------------------------------

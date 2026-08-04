@@ -115,5 +115,17 @@ CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.director_notes` (
   updated_at TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.character_sheets` (
+  character_sheet_id STRING NOT NULL,
+  character_id STRING NOT NULL,
+  summary STRING,
+  personality_notes STRING,
+  costume_considerations STRING,
+  scene_count INT64,
+  version INT64,
+  updated_at TIMESTAMP
+);
+
+
 
 
