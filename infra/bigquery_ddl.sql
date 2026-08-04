@@ -105,4 +105,15 @@ CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.music_cues` (
   updated_at TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.director_notes` (
+  director_note_id STRING NOT NULL,
+  scene_id STRING NOT NULL,
+  shot_suggestions ARRAY<STRING>,
+  pacing_notes STRING,
+  camera_plan STRING,
+  version INT64,
+  updated_at TIMESTAMP
+);
+
+
 

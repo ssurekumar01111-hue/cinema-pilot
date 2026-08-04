@@ -888,6 +888,66 @@ class ProductionGraphClient:
         return rows[0] if rows else None
 
     # -----------------------------------------------------------------------
+    # DIRECTOR NOTES
+    # -----------------------------------------------------------------------
+
+    def upsert_director_note(self, record: dict) -> None:
+        """
+        Insert or update a director note record in the Production Graph.
+
+        Args:
+            record: Dict with fields matching the ``director_notes`` table schema.
+                    Must include ``director_note_id`` and ``scene_id``.
+
+        Raises:
+            GraphClientError: If the BigQuery MERGE operation fails.
+        """
+        sql = f"""
+        MERGE {self._table('director_notes')} AS target
+        USING (SELECT @director_note_id AS director_note_id) AS source
+        ON target.director_note_id = source.director_note_id
+        WHEN MATCHED THEN UPDATE SET
+            scene_id         = @scene_id,
+            shot_suggestions = @shot_suggestions,
+            pacing_notes     = @pacing_notes,
+            camera_plan      = @camera_plan,
+            version          = target.version + 1,
+            updated_at       = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT
+            (director_note_id, scene_id, shot_suggestions, pacing_notes, camera_plan, version, updated_at)
+        VALUES
+            (@director_note_id, @scene_id, @shot_suggestions, @pacing_notes, @camera_plan, 1, CURRENT_TIMESTAMP())
+        """
+        self._run(sql, [
+            self._s("director_note_id", "STRING", record.get("director_note_id")),
+            self._s("scene_id",         "STRING", record.get("scene_id")),
+            self._a("shot_suggestions", "STRING", record.get("shot_suggestions", [])),
+            self._s("pacing_notes",     "STRING", record.get("pacing_notes")),
+            self._s("camera_plan",      "STRING", record.get("camera_plan")),
+        ])
+
+    def get_director_note(self, director_note_id: str) -> dict | None:
+        """
+        Fetch a single director note record by ID.
+
+        Args:
+            director_note_id: The director note's unique identifier.
+
+        Returns:
+            A dict of the director note record, or ``None`` if not found.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('director_notes')}
+        WHERE director_note_id = @director_note_id
+        LIMIT 1
+        """
+        rows = self._run(sql, [self._s("director_note_id", "STRING", director_note_id)])
+        return rows[0] if rows else None
+
+    # -----------------------------------------------------------------------
     # EVENTS (append-only audit log)
     # -----------------------------------------------------------------------
 
