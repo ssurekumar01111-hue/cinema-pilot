@@ -1205,6 +1205,64 @@ class ProductionGraphClient:
         return rows[0] if rows else None
 
     # -----------------------------------------------------------------------
+    # EXPLANATIONS
+    # -----------------------------------------------------------------------
+
+    def upsert_explanation(self, record: dict) -> None:
+        """
+        Insert or update an explanation record in the Production Graph.
+
+        Args:
+            record: Dict with fields matching the ``explanations`` table schema.
+                    Must include ``explanation_id`` and ``scene_id``.
+
+        Raises:
+            GraphClientError: If the BigQuery MERGE operation fails.
+        """
+        sql = f"""
+        MERGE {self._table('explanations')} AS target
+        USING (SELECT @explanation_id AS explanation_id) AS source
+        ON target.explanation_id = source.explanation_id
+        WHEN MATCHED THEN UPDATE SET
+            scene_id       = @scene_id,
+            narrative      = @narrative,
+            sources_used   = @sources_used,
+            version        = target.version + 1,
+            updated_at     = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT
+            (explanation_id, scene_id, narrative, sources_used, version, updated_at)
+        VALUES
+            (@explanation_id, @scene_id, @narrative, @sources_used, 1, CURRENT_TIMESTAMP())
+        """
+        self._run(sql, [
+            self._s("explanation_id", "STRING", record.get("explanation_id")),
+            self._s("scene_id",       "STRING", record.get("scene_id")),
+            self._s("narrative",      "STRING", record.get("narrative")),
+            self._a("sources_used",   "STRING", record.get("sources_used", [])),
+        ])
+
+    def get_explanation(self, explanation_id: str) -> dict | None:
+        """
+        Fetch a single explanation record by ID.
+
+        Args:
+            explanation_id: The explanation's unique identifier.
+
+        Returns:
+            A dict of the explanation record, or ``None`` if not found.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('explanations')}
+        WHERE explanation_id = @explanation_id
+        LIMIT 1
+        """
+        rows = self._run(sql, [self._s("explanation_id", "STRING", explanation_id)])
+        return rows[0] if rows else None
+
+    # -----------------------------------------------------------------------
     # EVENTS (append-only audit log)
     # -----------------------------------------------------------------------
 
@@ -1365,3 +1423,35 @@ class ProductionGraphClient:
         ORDER BY event_timestamp ASC
         """
         return self._run(sql, [self._s("since", "TIMESTAMP", since)])
+
+    def get_events_for_entity(self, entity_id: str) -> list[dict]:
+        """
+        Return all event records for a specific entity_id, ordered by event_timestamp ASC.
+
+        JSON columns are returned as serialised strings.
+
+        Args:
+            entity_id: The ID of the entity (e.g. scene_id or location_id).
+
+        Returns:
+            List of event dicts.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT
+            event_id,
+            event_timestamp,
+            actor_agent,
+            entity_type,
+            entity_id,
+            TO_JSON_STRING(before_state) AS before_state,
+            TO_JSON_STRING(after_state)  AS after_state,
+            triggered_agents
+        FROM {self._table('events')}
+        WHERE entity_id = @entity_id
+        ORDER BY event_timestamp ASC
+        """
+        return self._run(sql, [self._s("entity_id", "STRING", entity_id)])
+

@@ -147,6 +147,16 @@ CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.producer_overviews
   updated_at TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.explanations` (
+  explanation_id STRING NOT NULL,
+  scene_id STRING NOT NULL,
+  narrative STRING,
+  sources_used ARRAY<STRING>,
+  version INT64,
+  updated_at TIMESTAMP
+);
+
+
 
 
 
