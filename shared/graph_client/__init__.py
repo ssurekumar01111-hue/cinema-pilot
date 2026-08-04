@@ -824,6 +824,70 @@ class ProductionGraphClient:
         return rows[0] if rows else None
 
     # -----------------------------------------------------------------------
+    # MUSIC CUES
+    # -----------------------------------------------------------------------
+
+    def upsert_music_cue(self, record: dict) -> None:
+        """
+        Insert or update a music cue record in the Production Graph.
+
+        Args:
+            record: Dict with fields matching the ``music_cues`` table schema.
+                    Must include ``music_cue_id`` and ``scene_id``.
+
+        Raises:
+            GraphClientError: If the BigQuery MERGE operation fails.
+        """
+        sql = f"""
+        MERGE {self._table('music_cues')} AS target
+        USING (SELECT @music_cue_id AS music_cue_id) AS source
+        ON target.music_cue_id = source.music_cue_id
+        WHEN MATCHED THEN UPDATE SET
+            scene_id    = @scene_id,
+            gs_uri      = @gs_uri,
+            lyrics      = @lyrics,
+            description = @description,
+            prompt_used = @prompt_used,
+            status      = @status,
+            version     = target.version + 1,
+            updated_at  = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT
+            (music_cue_id, scene_id, gs_uri, lyrics, description, prompt_used, status, version, updated_at)
+        VALUES
+            (@music_cue_id, @scene_id, @gs_uri, @lyrics, @description, @prompt_used, @status, 1, CURRENT_TIMESTAMP())
+        """
+        self._run(sql, [
+            self._s("music_cue_id", "STRING", record.get("music_cue_id")),
+            self._s("scene_id",     "STRING", record.get("scene_id")),
+            self._s("gs_uri",       "STRING", record.get("gs_uri")),
+            self._s("lyrics",       "STRING", record.get("lyrics")),
+            self._s("description",  "STRING", record.get("description")),
+            self._s("prompt_used",  "STRING", record.get("prompt_used")),
+            self._s("status",       "STRING", record.get("status", "pending")),
+        ])
+
+    def get_music_cue(self, music_cue_id: str) -> dict | None:
+        """
+        Fetch a single music cue record by ID.
+
+        Args:
+            music_cue_id: The music cue's unique identifier.
+
+        Returns:
+            A dict of the music cue record, or ``None`` if not found.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('music_cues')}
+        WHERE music_cue_id = @music_cue_id
+        LIMIT 1
+        """
+        rows = self._run(sql, [self._s("music_cue_id", "STRING", music_cue_id)])
+        return rows[0] if rows else None
+
+    # -----------------------------------------------------------------------
     # EVENTS (append-only audit log)
     # -----------------------------------------------------------------------
 

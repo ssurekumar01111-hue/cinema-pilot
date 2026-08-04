@@ -93,3 +93,16 @@ CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.storyboards` (
   updated_at TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.music_cues` (
+  music_cue_id STRING NOT NULL,
+  scene_id STRING NOT NULL,
+  gs_uri STRING,
+  lyrics STRING,
+  description STRING,
+  prompt_used STRING,
+  status STRING,
+  version INT64,
+  updated_at TIMESTAMP
+);
+
+
