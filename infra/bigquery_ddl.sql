@@ -135,6 +135,19 @@ CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.voice_previews` (
   updated_at TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.producer_overviews` (
+  producer_overview_id STRING NOT NULL,
+  scene_id STRING NOT NULL,
+  overview_summary STRING,
+  total_budget_impact FLOAT64,
+  schedule_status STRING,
+  outstanding_risks ARRAY<STRING>,
+  recommendation STRING,
+  version INT64,
+  updated_at TIMESTAMP
+);
+
+
 
 
 

@@ -588,6 +588,26 @@ class ProductionGraphClient:
         """
         return self._run(sql, [])
 
+    def get_budget_lines_for_entity(self, linked_entity_id: str) -> list[dict]:
+        """
+        Return all budget line records for a given linked_entity_id.
+
+        Args:
+            linked_entity_id: The ID of the linked entity (e.g. scene_id).
+
+        Returns:
+            List of budget line dicts matching linked_entity_id.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('budget_lines')}
+        WHERE linked_entity_id = @linked_entity_id
+        ORDER BY updated_at DESC
+        """
+        return self._run(sql, [self._s("linked_entity_id", "STRING", linked_entity_id)])
+
     # -----------------------------------------------------------------------
     # SCHEDULE BLOCKS
     # -----------------------------------------------------------------------
@@ -781,6 +801,26 @@ class ProductionGraphClient:
         SELECT * FROM {self._table('risk_flags')}
         WHERE linked_entity_id = @linked_entity_id
           AND (mitigation IS NULL OR TRIM(mitigation) = '')
+        ORDER BY severity DESC, updated_at DESC
+        """
+        return self._run(sql, [self._s("linked_entity_id", "STRING", linked_entity_id)])
+
+    def get_risk_flags_for_entity(self, linked_entity_id: str) -> list[dict]:
+        """
+        Return ALL risk flags for a given linked_entity_id regardless of mitigation status.
+
+        Args:
+            linked_entity_id: The ID of the linked entity (e.g. a location_id or scene_id).
+
+        Returns:
+            List of risk flag dicts matching the linked_entity_id.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('risk_flags')}
+        WHERE linked_entity_id = @linked_entity_id
         ORDER BY severity DESC, updated_at DESC
         """
         return self._run(sql, [self._s("linked_entity_id", "STRING", linked_entity_id)])
@@ -1096,6 +1136,72 @@ class ProductionGraphClient:
         LIMIT 1
         """
         rows = self._run(sql, [self._s("voice_preview_id", "STRING", voice_preview_id)])
+        return rows[0] if rows else None
+
+    # -----------------------------------------------------------------------
+    # PRODUCER OVERVIEWS
+    # -----------------------------------------------------------------------
+
+    def upsert_producer_overview(self, record: dict) -> None:
+        """
+        Insert or update a producer overview record in the Production Graph.
+
+        Args:
+            record: Dict with fields matching the ``producer_overviews`` table schema.
+                    Must include ``producer_overview_id`` and ``scene_id``.
+
+        Raises:
+            GraphClientError: If the BigQuery MERGE operation fails.
+        """
+        sql = f"""
+        MERGE {self._table('producer_overviews')} AS target
+        USING (SELECT @producer_overview_id AS producer_overview_id) AS source
+        ON target.producer_overview_id = source.producer_overview_id
+        WHEN MATCHED THEN UPDATE SET
+            scene_id             = @scene_id,
+            overview_summary     = @overview_summary,
+            total_budget_impact  = @total_budget_impact,
+            schedule_status      = @schedule_status,
+            outstanding_risks    = @outstanding_risks,
+            recommendation       = @recommendation,
+            version              = target.version + 1,
+            updated_at           = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT
+            (producer_overview_id, scene_id, overview_summary, total_budget_impact,
+             schedule_status, outstanding_risks, recommendation, version, updated_at)
+        VALUES
+            (@producer_overview_id, @scene_id, @overview_summary, @total_budget_impact,
+             @schedule_status, @outstanding_risks, @recommendation, 1, CURRENT_TIMESTAMP())
+        """
+        self._run(sql, [
+            self._s("producer_overview_id", "STRING",  record.get("producer_overview_id")),
+            self._s("scene_id",             "STRING",  record.get("scene_id")),
+            self._s("overview_summary",     "STRING",  record.get("overview_summary")),
+            self._s("total_budget_impact",  "FLOAT64", record.get("total_budget_impact", 0.0)),
+            self._s("schedule_status",      "STRING",  record.get("schedule_status")),
+            self._a("outstanding_risks",    "STRING",  record.get("outstanding_risks", [])),
+            self._s("recommendation",       "STRING",  record.get("recommendation")),
+        ])
+
+    def get_producer_overview(self, producer_overview_id: str) -> dict | None:
+        """
+        Fetch a single producer overview record by ID.
+
+        Args:
+            producer_overview_id: The producer overview's unique identifier.
+
+        Returns:
+            A dict of the producer overview record, or ``None`` if not found.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT * FROM {self._table('producer_overviews')}
+        WHERE producer_overview_id = @producer_overview_id
+        LIMIT 1
+        """
+        rows = self._run(sql, [self._s("producer_overview_id", "STRING", producer_overview_id)])
         return rows[0] if rows else None
 
     # -----------------------------------------------------------------------
