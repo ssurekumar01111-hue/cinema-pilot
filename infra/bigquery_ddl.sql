@@ -126,6 +126,16 @@ CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.character_sheets` 
   updated_at TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.voice_previews` (
+  voice_preview_id STRING NOT NULL,
+  scene_id STRING NOT NULL,
+  dialogue_lines JSON,
+  gs_uri STRING,
+  version INT64,
+  updated_at TIMESTAMP
+);
+
+
 
 
 

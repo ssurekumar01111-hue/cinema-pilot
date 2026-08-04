@@ -1030,6 +1030,75 @@ class ProductionGraphClient:
         return rows[0] if rows else None
 
     # -----------------------------------------------------------------------
+    # VOICE PREVIEWS
+    # -----------------------------------------------------------------------
+
+    def upsert_voice_preview(self, record: dict) -> None:
+        """
+        Insert or update a voice preview record in the Production Graph.
+
+        Args:
+            record: Dict with fields matching the ``voice_previews`` table schema.
+                    Must include ``voice_preview_id`` and ``scene_id``.
+
+        Raises:
+            GraphClientError: If the BigQuery MERGE operation fails.
+        """
+        dialogue_json = record.get("dialogue_lines")
+        if isinstance(dialogue_json, (dict, list)):
+            dialogue_json_str = json.dumps(dialogue_json)
+        else:
+            dialogue_json_str = dialogue_json or "[]"
+
+        sql = f"""
+        MERGE {self._table('voice_previews')} AS target
+        USING (SELECT @voice_preview_id AS voice_preview_id) AS source
+        ON target.voice_preview_id = source.voice_preview_id
+        WHEN MATCHED THEN UPDATE SET
+            scene_id       = @scene_id,
+            dialogue_lines = PARSE_JSON(@dialogue_lines),
+            gs_uri         = @gs_uri,
+            version        = target.version + 1,
+            updated_at     = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT
+            (voice_preview_id, scene_id, dialogue_lines, gs_uri, version, updated_at)
+        VALUES
+            (@voice_preview_id, @scene_id, PARSE_JSON(@dialogue_lines), @gs_uri, 1, CURRENT_TIMESTAMP())
+        """
+        self._run(sql, [
+            self._s("voice_preview_id", "STRING", record.get("voice_preview_id")),
+            self._s("scene_id",         "STRING", record.get("scene_id")),
+            self._s("dialogue_lines",   "STRING", dialogue_json_str),
+            self._s("gs_uri",           "STRING", record.get("gs_uri")),
+        ])
+
+    def get_voice_preview(self, voice_preview_id: str) -> dict | None:
+        """
+        Fetch a single voice preview record by ID.
+
+        Returns:
+            A dict of the voice preview record (with ``dialogue_lines`` returned as a serialised JSON string),
+            or ``None`` if not found.
+
+        Raises:
+            GraphClientError: If the BigQuery operation fails.
+        """
+        sql = f"""
+        SELECT
+            voice_preview_id,
+            scene_id,
+            TO_JSON_STRING(dialogue_lines) AS dialogue_lines,
+            gs_uri,
+            version,
+            updated_at
+        FROM {self._table('voice_previews')}
+        WHERE voice_preview_id = @voice_preview_id
+        LIMIT 1
+        """
+        rows = self._run(sql, [self._s("voice_preview_id", "STRING", voice_preview_id)])
+        return rows[0] if rows else None
+
+    # -----------------------------------------------------------------------
     # EVENTS (append-only audit log)
     # -----------------------------------------------------------------------
 
