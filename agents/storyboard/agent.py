@@ -145,14 +145,15 @@ def generate_storyboard(scene_id: str) -> dict[str, Any]:
     }
     graph_client.upsert_storyboard(storyboard_record)
 
-    after_state = graph_client.get_storyboard(storyboard_id) or storyboard_record
+    # Helper to sanitize datetime objects for json.dumps in log_event
+    cleaned_before = {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in before_state.items()}
 
     # f. Log event
     graph_client.log_event(
         actor_agent="storyboard_agent",
         entity_type="storyboard",
         entity_id=scene_id,
-        before_state=before_state,
+        before_state=cleaned_before,
         after_state={"gs_uri": gs_uri, "prompt_used": prompt},
         triggered_agents=[],
     )

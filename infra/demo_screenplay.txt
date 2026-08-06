@@ -1,0 +1,686 @@
+                              STATIC
+
+                    An Original Short Screenplay
+               For CinemaPilot Internal Demo Use Only
+              Not Based on Any Existing Film or Property
+
+                          Written: August 2026
+
+================================================================================
+
+CHARACTERS
+
+  DR. NADIA VOSS  — 43, astrophysicist. Tenacious, perpetually caffeinated.
+  FELIX CRANE     — 26, Nadia's grad student. Anxious, sharper than he looks.
+  AGENT MARGOT REYES — 35, government operative. Calm, precise, unreadable.
+  EDGAR PARK      — 56, Nadia's former mentor. White-haired, conflicted, late.
+
+LOCATIONS
+
+  Mesa Verde Radio Observatory  — remote plateau, three giant satellite dishes
+  University Astrophysics Lab   — fluorescent lights, whiteboards, burnt coffee
+  University Campus Parking Lot — sodium lamps, black SUV
+  Government SUV                — moving, tinted windows
+  Millbrook Storage Unit        — ten by twenty feet, bare bulb  [DEMO SCENE 5]
+
+PROPS (named)
+
+  Crumpled frequency printout, THERMOS (Nadia's), battered TRANSISTOR RADIO,
+  RED USB DRIVE, laptop bag, burner phone, empty chip bag, broken office chair,
+  rolled-up rug, motivational poster ("HANG IN THERE" — kitten on a branch),
+  printed image of the observatory.
+
+================================================================================
+
+
+FADE IN:
+
+
+==============================================================================
+SCENE 1 — WONDER / QUIET TENSION
+==============================================================================
+
+EXT. MESA VERDE RADIO OBSERVATORY — NIGHT
+
+A vast plateau. Ink-black sky, too many stars. Three enormous satellite dishes
+tilt toward the heavens like supplicants. A battered PICKUP TRUCK is parked
+alone beside a small equipment shed.
+
+DR. NADIA VOSS (43, tangled hair, coffee-stained field jacket) leans against
+the truck's hood, staring at a LAPTOP balanced on a stack of frequency
+printouts. The silence is absolute.
+
+A BEEP from the laptop. Then another. Then a cascade.
+
+Nadia sets down her THERMOS and leans in close.
+
+                              NADIA
+                    (barely audible)
+                    That's not noise.
+
+She tears off a fresh sheet from the portable printer — a CRUMPLED FREQUENCY
+PRINTOUT — and holds it up against the starlight, squinting.
+
+                              NADIA (CONT'D)
+                    Felix. Felix, wake up.
+
+She raps on the truck's rear window. FELIX CRANE (26, beanie, perpetually
+underdressed for the altitude) startles awake in the truck bed, knocking over
+an EMPTY CHIP BAG.
+
+                              FELIX
+                    (groggy)
+                    Is it the coyotes again?
+
+                              NADIA
+                    It's not coyotes.
+
+She holds up the printout. Felix squints at it. His eyes widen.
+
+                              FELIX
+                    That's — that's structured.
+
+                              NADIA
+                    Fifty-eight-point-three gigahertz.
+                    Repeating every four minutes and
+                    seventeen seconds. For the past
+                    two hours.
+
+                              FELIX
+                    From where?
+
+Nadia turns the laptop toward him. A single point on a star map pulses red.
+
+                              NADIA
+                    Sector 12-Bravo. Deep field. Nothing's
+                    there, Felix. Nothing should be there.
+
+A long silence. Wind moves through the dish cables — a low, resonant hum,
+almost like a held note.
+
+                              FELIX
+                              (quiet)
+                    What does it sound like?
+
+Nadia pulls a battered TRANSISTOR RADIO from the equipment shed — old,
+wired to the laptop with a tangle of adapters — and turns the dial. A pattern
+rises from static. Rhythmic. Almost musical.
+
+They both go still and listen.
+
+                              FELIX (CONT'D)
+                    It sounds like counting.
+
+
+                                                              CUT TO:
+
+
+==============================================================================
+SCENE 2 — URGENT / THRILLER
+==============================================================================
+
+INT. UNIVERSITY ASTROPHYSICS LAB — NIGHT
+
+Fluorescent lights hum overhead. Whiteboards dense with equations. The smell
+of burnt coffee and dry-erase marker. It is very late and very bright.
+
+Nadia and Felix are at their stations, wired in, monitors lit. The FREQUENCY
+PRINTOUT is pinned to the wall, annotated in red marker. A hand-drawn waveform
+diagram covers half a whiteboard.
+
+                              FELIX
+                    Okay. It's not random. I ran it
+                    through three pattern models.
+                    Look.
+
+He spins his monitor toward her. Columns of numbers, color-coded.
+
+                              NADIA
+                    Base-twelve counting. Ascending
+                    from... twelve, up to —
+
+                              FELIX
+                              (finishing)
+                    — one. It's a countdown.
+
+A beat. The fluorescent lights hum.
+
+                              NADIA
+                    How long until it hits one?
+
+                              FELIX
+                    At current interval... fourteen hours,
+                    twenty-two minutes.
+
+                              NADIA
+                    And then?
+
+                              FELIX
+                    I have absolutely no idea.
+
+Nadia stands and paces. She picks up her THERMOS — empty — and sets it
+down with a hollow clank. She paces some more.
+
+                              NADIA
+                    Who else knows about this?
+
+                              FELIX
+                    Just us. I haven't logged it yet.
+                    I was about to —
+
+                              NADIA
+                    Don't. Not yet. Twelve hours.
+
+                              FELIX
+                    Nadia, if this is real —
+
+                              NADIA
+                    If this is real, the moment we
+                    file, we lose it. Government
+                    protocols. Clearance reviews.
+                    Security holds. It gets buried
+                    in a committee room and we
+                    never see it again.
+
+Felix chews his lip. He makes a decision: pulls a RED USB DRIVE from his
+jacket pocket and plugs it in. Data begins to copy.
+
+                              FELIX
+                    Twelve hours.
+
+                              NADIA
+                              (almost a smile)
+                    Twelve hours.
+
+Felix's PHONE buzzes face-up on the desk. He glances at it. His expression
+changes.
+
+                              FELIX
+                    There's someone in the parking lot.
+
+They both go very still.
+
+
+                                                              CUT TO:
+
+
+==============================================================================
+SCENE 3 — ACTION / CONFRONTATION
+==============================================================================
+
+EXT. UNIVERSITY CAMPUS — PARKING LOT — NIGHT
+
+A black SUV idles under a sodium lamp. AGENT MARGOT REYES (35, sharp suit,
+sharper eyes) stands outside it, phone to her ear, utterly unhurried.
+
+                              REYES
+                              (into phone)
+                    Confirmation. Signal flagged on
+                    the federal passive array forty
+                    minutes ago. Voss's lab is dark
+                    but her card swiped at 11:52.
+
+She listens.
+
+                              REYES (CONT'D)
+                    Yes, sir. Retrieval only. No
+                    escalation unless she runs.
+
+A light flicks off in a second-floor window. Reyes sees it.
+
+                              REYES (CONT'D)
+                    She's running.
+
+She signals to two FIGURES by the SUV without raising her voice. They move
+toward the building entrance, calm and quick.
+
+From a fire exit at the far end of the building: Nadia bursts out at a dead
+sprint. She clutches a LAPTOP BAG and — absurdly, out of pure reflex — her
+THERMOS.
+
+Reyes watches her cut across the parking lot, weaving between cars.
+
+                              REYES (CONT'D)
+                              (into phone)
+                    She's running.
+
+A pause.
+
+                              REYES (CONT'D)
+                              (to the driver)
+                    Cut her off at Millbrook. Gently.
+
+She doesn't run. She walks, calmly, toward the SUV, and opens the rear door
+herself.
+
+
+                                                              CUT TO:
+
+
+==============================================================================
+SCENE 4 — TENSE DIALOGUE / SURPRISE REVEAL
+==============================================================================
+
+INT. GOVERNMENT SUV — MOVING — NIGHT
+
+Nadia sits in the back seat. LAPTOP BAG beside her. She has not let go of the
+THERMOS. Reyes sits opposite, studying her.
+
+                              NADIA
+                    You're going to tell me this is
+                    for national security.
+
+                              REYES
+                    I'm going to tell you we're having
+                    a conversation. That's all.
+
+                              NADIA
+                    Then I can leave.
+
+                              REYES
+                    In about twenty minutes, sure.
+
+The city slides past the tinted windows. Traffic. Ordinary life.
+
+                              REYES (CONT'D)
+                    We've been monitoring that frequency
+                    band for three years, Dr. Voss.
+                    You had the right equipment in the
+                    right place on the right night.
+                    That's remarkable. But you're not
+                    the first person to find it.
+
+                              NADIA
+                              (quietly)
+                    Who was?
+
+The partition between front and back seats slides open. In the passenger
+seat sits EDGAR PARK (56, white-haired, reading glasses on a chain around
+his neck). He turns to look at Nadia. His expression is one of genuine regret.
+
+                              NADIA (CONT'D)
+                    Edgar.
+
+                              EDGAR
+                              (gently)
+                    Hello, Nadia.
+
+A long, wounded silence. The SUV makes a smooth turn.
+
+                              NADIA
+                    You've known.
+
+                              EDGAR
+                    Two years. I'm sorry.
+
+                              NADIA
+                              (controlled fury)
+                    You knew and you didn't tell me.
+                    You sat in my seminar. You reviewed
+                    my grant applications —
+
+                              EDGAR
+                    I was protecting you. If you'd
+                    found it independently, under
+                    official aegis, there would have
+                    been protection. A framework. Now—
+
+                              NADIA
+                    Now I'm in a car.
+
+                              REYES
+                    Now you're in a car. And your grad
+                    student has a red USB drive in his
+                    jacket pocket.
+
+Nadia's expression does not change. Which tells Reyes everything.
+
+                              REYES (CONT'D)
+                    We'll need that back.
+
+
+                                                              CUT TO:
+
+
+==============================================================================
+SCENE 5 — QUIET / COMEDIC RELIEF
+[RELOCATION DEMO SCENE — see production note below]
+==============================================================================
+
+INT. MILLBROOK STORAGE UNIT — NIGHT
+
+  PRODUCTION NOTE: This scene is written for a plain interior for budget
+  reasons. The action (phone call, isolation, character beat) is location-
+  agnostic. For the relocation demo, this scene can be moved to: an outdoor
+  park bench, a beach at night, a rooftop, a marina dock, a street corner,
+  etc. Nothing in the scene's dialogue or action depends on being indoors.
+
+A corrugated-metal storage unit, ten by twenty feet. A single bare bulb
+swings gently overhead. Cardboard boxes, a broken OFFICE CHAIR, a rolled-up
+RUG. The kind of place that smells like old decisions.
+
+FELIX sits on a box marked FRAGILE. He still has the RED USB DRIVE clipped
+to his jacket zipper. He has his phone. He looks like a person who did not
+plan to be here.
+
+His phone buzzes. UNKNOWN NUMBER. He stares at it. Answers.
+
+                              FELIX
+                              (hushed)
+                    Hello?
+
+                              NADIA (V.O.)
+                              (barely audible, through static)
+                    It's me. Burner. Don't say my name.
+
+                              FELIX
+                    Are you okay?
+
+                              NADIA (V.O.)
+                    Physically, yes. Professionally,
+                    debatable. Do you still have it?
+
+Felix touches the USB drive on his zipper.
+
+                              FELIX
+                    Yeah.
+
+                              NADIA (V.O.)
+                    They know. Don't go back to the
+                    lab, don't go home, don't —
+
+                              FELIX
+                              (whispering louder than intended)
+                    I'm in a storage unit, Nadia. I have
+                    eleven granola bars and no blanket.
+                    My "don't go home" situation is
+                    already fully operational.
+
+A pause on the line.
+
+                              NADIA (V.O.)
+                              (suppressing something)
+                    Eleven granola bars.
+
+                              FELIX
+                    I panicked and grabbed the emergency
+                    bag. It's mostly granola bars and
+                    a phone charger.
+
+                              NADIA (V.O.)
+                    That's actually... not bad.
+
+                              FELIX
+                    There's also a motivational poster
+                    from 2019. "HANG IN THERE."
+
+                              NADIA (V.O.)
+                    Felix.
+
+                              FELIX
+                    Right. Sorry. Focusing.
+
+                              NADIA (V.O.)
+                    The countdown. Fourteen hours from
+                    when we left the lab — now about
+                    twelve. Whatever is at the end of
+                    it, we need to decode the final
+                    frame before it zeros out. The
+                    data is on that drive.
+
+                              FELIX
+                    And you need me to run it.
+
+                              NADIA (V.O.)
+                    I need you to run it. Find somewhere
+                    with power and a connection. Not
+                    your accounts — use the observatory
+                    guest credentials. I changed them
+                    last Tuesday.
+
+                              FELIX
+                    Observatory guest credentials.
+                    Got it.
+
+                              NADIA (V.O.)
+                    And Felix?
+
+                              FELIX
+                    Yeah?
+
+                              NADIA (V.O.)
+                    Thank you. For grabbing it. I know
+                    you were scared.
+
+A long beat.
+
+                              FELIX
+                              (quietly)
+                    I'm still scared.
+
+                              NADIA (V.O.)
+                    Good. Scared people pay attention.
+
+The call ends. Felix stares at the USB drive. He looks up at the bare bulb.
+
+                              FELIX
+                              (to himself)
+                    Okay.
+
+He stands. Slings his bag. Pauses at the door — and looks back at the
+motivational poster. A stock photo of a kitten dangling from a branch.
+
+                              FELIX (CONT'D)
+                    Yeah. Fair enough.
+
+He slips out into the dark.
+
+
+                                                              CUT TO:
+
+
+==============================================================================
+SCENE 6 — CLIMAX / EMOTIONAL
+==============================================================================
+
+INT. UNIVERSITY ASTROPHYSICS LAB — DAY
+
+Early morning light through tall windows. The lab has been searched: drawers
+open, monitors dark, cables unplugged. Someone has been thorough.
+
+But Felix is here. He's in the corner by a WALL SOCKET, laptop open and
+running. He's been here since 4 AM. He looks like it.
+
+The door opens. Nadia walks in.
+
+                              FELIX
+                    How did you —
+
+                              NADIA
+                    Edgar. He left the back-door
+                    keypad code in a voicemail from
+                    2024 that I never deleted.
+                    He's old-fashioned.
+
+She pulls up a chair beside him. Looks at the screen without sitting down
+first. Then sits.
+
+                              FELIX
+                    Three hours left. I've been running
+                    the final-frame decode since 4 AM.
+                    It's not what I thought it would be.
+
+                              NADIA
+                    What do you mean?
+
+Felix turns the screen toward her.
+
+                              FELIX
+                    It's not a countdown to something
+                    happening. It's a countdown to
+                    something being revealed. The last
+                    data block is a compressed image
+                    file. It's been transmitting in
+                    fragments across the entire sequence.
+                    We've been receiving it for two hours
+                    and didn't know.
+
+Nadia stares. Her hand finds the THERMOS — still the same one, impossibly
+still full somehow — and she takes a slow sip without looking away from
+the screen.
+
+                              NADIA
+                    What's the image?
+
+                              FELIX
+                    Still decoding. But look at the
+                    coordinate header on the file.
+
+She looks. A long silence. She sets the thermos down.
+
+                              NADIA
+                    That's not a location in space.
+
+                              FELIX
+                    No.
+
+                              NADIA
+                    Those are Earth coordinates.
+
+                              FELIX
+                              (barely above a whisper)
+                    Pacific coast. Forty-seven degrees
+                    north.
+
+They look at each other.
+
+The laptop CHIMES softly. The image resolves: sharp, photographic, detailed.
+
+
+                                                              CUT TO:
+
+
+==============================================================================
+SCENE 7 — QUIET / HOPEFUL / RESOLUTION
+==============================================================================
+
+EXT. MESA VERDE RADIO OBSERVATORY — DAWN
+
+First light. The plateau glows pale gold. The great dishes are motionless
+against a sky that is changing from black to blue to something in between.
+
+Nadia stands alone outside the equipment shed. She holds a PRINTOUT — the
+decoded image. It is a photograph-quality rendering of this observatory.
+These dishes. This exact place. Transmitted from somewhere very far away.
+
+As if whoever sent the signal already knew they'd be standing here. As if
+they were sending something back.
+
+Footsteps in the gravel. Edgar approaches, coat rumpled, looking his age.
+
+                              EDGAR
+                    Agent Reyes will be here within
+                    the hour. We don't have long to
+                    decide what we —
+
+                              NADIA
+                    She can have it.
+
+Edgar blinks. That was not what he expected.
+
+                              NADIA (CONT'D)
+                    All of it. Raw files, full decode,
+                    every log. We document that we
+                    found it first, we retain academic
+                    credit — in writing, Edgar, signed
+                    tonight — and then we hand it over.
+
+                              EDGAR
+                    Why?
+
+Nadia holds up the printout. She doesn't look at him when she says it.
+
+                              NADIA
+                    Because this isn't ours to keep.
+                    Whatever this is — whoever sent it —
+                    they chose this place. They'll make
+                    contact again. And when they do,
+                    I want to be standing here.
+
+She looks out at the dishes.
+
+                              NADIA (CONT'D)
+                    Not in a government car. Here.
+
+A long silence. Wind through the cables. That same low, resonant hum.
+
+Edgar looks at the printout. Then at the sky. Something in his face loosens.
+
+                              EDGAR
+                              (quietly)
+                    You were always better at this
+                    than me.
+
+                              NADIA
+                    I know.
+
+She almost smiles.
+
+Felix emerges from the equipment shed, thermos in hand — he must have
+refilled it at some point — and hands it to Nadia without a word.
+
+She takes it. They stand there, the three of them, watching the dishes
+catch the morning light.
+
+The wind moves through the cables.
+
+The low hum continues.
+
+
+                                                          FADE TO BLACK.
+
+
+================================================================================
+
+                              THE END
+
+================================================================================
+
+DEMO NOTES FOR CINEMAPILOT AGENTS
+----------------------------------
+
+SCENE SUMMARY TABLE:
+
+  Scene | Location                   | Tone          | Key Entities
+  ------|----------------------------|---------------|----------------------------------
+    1   | Mesa Verde Observatory     | Wonder/Tense  | Nadia, Felix; printout, thermos,
+        | (EXT, NIGHT)               |               | transistor radio
+    2   | University Lab (INT,NIGHT) | Urgent/Tense  | Nadia, Felix; USB drive, thermos
+    3   | Campus Parking Lot         | Action        | Reyes + 2 figures; SUV
+        | (EXT, NIGHT)               |               |
+    4   | Government SUV (INT,NIGHT) | Tense/Drama   | Nadia, Reyes, Edgar; laptop bag
+    5   | Millbrook Storage Unit     | Quiet/Comedy  | Felix only; USB drive, granola
+        | (INT, NIGHT) [DEMO]        |               | bars, poster, bare bulb
+    6   | University Lab (INT, DAY)  | Climax/Emot.  | Nadia, Felix; laptop, thermos
+    7   | Mesa Verde Observatory     | Hopeful/Quiet | Nadia, Edgar, Felix; printout
+        | (EXT, DAWN)                |               | thermos
+
+RELOCATION DEMO (Scene 5):
+  Current:  INT. MILLBROOK STORAGE UNIT — NIGHT
+  Demo swap options (any work without script changes):
+    - EXT. OCEAN BEACH — NIGHT (expensive: golden hour, tide, extras)
+    - EXT. MOUNTAIN OVERLOOK — NIGHT (expensive: rig, weather risk)
+    - EXT. ROOFTOP — NIGHT (medium: city skyline dressing)
+    - EXT. PARK BENCH — NIGHT (low cost, still outdoor)
+  Budget delta will be surfaced by the Budget Agent automatically.
+
+MUSIC CUES (suggested, for Music Agent):
+  Scene 1: Sparse, sustained strings — wonder, space
+  Scene 2: Rising electronic pulse — urgency
+  Scene 3: Short, percussive — action burst
+  Scene 4: Slow piano — unease and betrayal
+  Scene 5: Dry, minimal — comedy underscoring (silence + single pluck)
+  Scene 6: Building orchestral — revelation
+  Scene 7: Resolving, open — hope, unanswered questions
+
+================================================================================
