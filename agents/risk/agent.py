@@ -200,55 +200,10 @@ def mitigate_risks(location_id: str) -> list[dict[str, Any]]:
     return updated_records
 
 
-import httpx
-from google.adk.tools.mcp_tool import (
-    McpToolset,
-    StreamableHTTPConnectionParams,
-)
-
-# ---------------------------------------------------------------------------
-# Grafana MCP Helper
-# ---------------------------------------------------------------------------
-
-_TOKEN_FILE = Path.home() / ".cinemapilot" / "grafana_mcp_token.json"
-
+from shared.grafana_client import get_grafana_toolset as _shared_get_grafana_toolset
 
 def get_grafana_toolset() -> McpToolset:
-    """
-    Constructs an ADK McpToolset connected to the Grafana Cloud MCP server.
-    Loads cached OAuth 2.1 Bearer token from ~/.cinemapilot/grafana_mcp_token.json.
-    """
-    if not _TOKEN_FILE.exists():
-        raise RuntimeError(
-            f"Grafana MCP token file not found at {_TOKEN_FILE}. "
-            "Please run `python infra/grafana_oauth_bootstrap.py` first to authenticate."
-        )
-
-    try:
-        token_data = json.loads(_TOKEN_FILE.read_text(encoding="utf-8"))
-        access_token = token_data.get("access_token")
-        if not access_token:
-            raise ValueError("Token file missing 'access_token' field.")
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to read Grafana MCP token from {_TOKEN_FILE}: {exc}. "
-            "Please re-run `python infra/grafana_oauth_bootstrap.py`."
-        ) from exc
-
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "X-Grafana-URL": "https://daringhamster1557.grafana.net",
-    }
-
-    connection_params = StreamableHTTPConnectionParams(
-        url="https://mcp.grafana.com/mcp",
-        headers=headers,
-    )
-
-    return McpToolset(
-        connection_params=connection_params,
-        tool_filter=["list_incidents", "create_incident"],
-    )
+    return _shared_get_grafana_toolset(tool_filter=["list_incidents", "create_incident"])
 
 
 async def escalate_risk_to_grafana(risk_flag_id: str) -> dict:

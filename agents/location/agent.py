@@ -107,6 +107,148 @@ def _strip_code_fences(text: str) -> str:
     return match.group(1).strip() if match else text
 
 
+from shared.grafana_client import get_grafana_toolset
+
+# ---------------------------------------------------------------------------
+# Grafana MCP Observability Helper
+# ---------------------------------------------------------------------------
+
+async def check_observability_context(location_name: str) -> dict[str, Any]:
+    """
+    Query Grafana Cloud MCP for observability data (datasources, metrics, logs)
+    relevant to location_name, logging audit events.
+
+    Args:
+        location_name: Name of the location (e.g. "Sunset Beach").
+
+    Returns:
+        Dict containing observability findings and query status.
+    """
+    graph = ProductionGraphClient()
+    toolset = get_grafana_toolset(
+        tool_filter=[
+            "list_datasources",
+            "list_prometheus_metric_names",
+            "query_prometheus",
+            "query_loki_logs",
+        ]
+    )
+
+    tools = await toolset.get_tools()
+    tools_by_name = {t.name: t for t in tools}
+    list_ds_tool = tools_by_name.get("list_datasources")
+
+    datasources: list[dict[str, Any]] = []
+    if list_ds_tool:
+        try:
+            ds_res = await list_ds_tool._run_async_impl(args={}, tool_context=None, credential=None)
+            content_list = ds_res.get("content", [])
+            for c in content_list:
+                if c.get("type") == "text":
+                    try:
+                        parsed = json.loads(c.get("text", "{}"))
+                        datasources = parsed.get("datasources", parsed if isinstance(parsed, list) else [])
+                    except json.JSONDecodeError:
+                        pass
+        except Exception as exc:
+            print(f"[location_agent] Warning: list_datasources check failed ({exc})")
+
+    if not datasources:
+        result_dict = {
+            "datasources_checked": True,
+            "relevant_data_found": False,
+            "datasources_count": 0,
+            "note": "No datasources configured in this Grafana stack yet",
+        }
+        graph.log_event(
+            actor_agent="location_agent",
+            entity_type="observability_check",
+            entity_id=location_name,
+            before_state={},
+            after_state=result_dict,
+            triggered_agents=[],
+        )
+        return result_dict
+
+    # Filter for Prometheus or Loki datasources
+    prometheus_ds = [ds for ds in datasources if "prometheus" in str(ds.get("type", "")).lower()]
+    loki_ds = [ds for ds in datasources if "loki" in str(ds.get("type", "")).lower()]
+
+    queried_metrics: list[Any] = []
+    queried_logs: list[Any] = []
+
+    # Check Prometheus metrics if available
+    prom_tool = tools_by_name.get("list_prometheus_metric_names")
+    if prometheus_ds and prom_tool:
+        prom_uid = prometheus_ds[0].get("uid")
+        if prom_uid:
+            try:
+                metrics_res = await prom_tool._run_async_impl(
+                    args={"datasourceUid": prom_uid}, tool_context=None, credential=None
+                )
+                queried_metrics.append(metrics_res)
+            except Exception as exc:
+                print(f"[location_agent] Warning: list_prometheus_metric_names failed: {exc}")
+
+    # Check Loki logs if available
+    loki_tool = tools_by_name.get("query_loki_logs")
+    if loki_ds and loki_tool:
+        loki_uid = loki_ds[0].get("uid")
+        if loki_uid:
+            try:
+                logs_res = await loki_tool._run_async_impl(
+                    args={"datasourceUid": loki_uid, "logql": f'{{app="cinemapilot"}} |= `{location_name}`'},
+                    tool_context=None,
+                    credential=None,
+                )
+                queried_logs.append(logs_res)
+            except Exception as exc:
+                print(f"[location_agent] Warning: query_loki_logs failed: {exc}")
+
+    # Determine if any query actually succeeded AND returned non-empty, non-error content
+    has_valid_metrics = False
+    for res in queried_metrics:
+        if isinstance(res, dict) and not res.get("isError", False):
+            for c in res.get("content", []):
+                if c.get("type") == "text" and c.get("text", "[]").strip() not in ("[]", ""):
+                    has_valid_metrics = True
+
+    has_valid_logs = False
+    for res in queried_logs:
+        if isinstance(res, dict) and not res.get("isError", False):
+            for c in res.get("content", []):
+                if c.get("type") == "text":
+                    try:
+                        parsed = json.loads(c.get("text", "{}"))
+                        if parsed.get("data") and len(parsed.get("data")) > 0:
+                            has_valid_logs = True
+                    except json.JSONDecodeError:
+                        pass
+
+    relevant_data_found = has_valid_metrics or has_valid_logs
+
+    result_dict = {
+        "datasources_checked": True,
+        "relevant_data_found": relevant_data_found,
+        "datasources_count": len(datasources),
+        "prometheus_count": len(prometheus_ds),
+        "loki_count": len(loki_ds),
+        "metrics_response": queried_metrics,
+        "logs_response": queried_logs,
+    }
+
+    graph.log_event(
+        actor_agent="location_agent",
+        entity_type="observability_check",
+        entity_id=location_name,
+        before_state={},
+        after_state=result_dict,
+        triggered_agents=[],
+    )
+
+    return result_dict
+
+
 # ---------------------------------------------------------------------------
 # Main Agent Function
 # ---------------------------------------------------------------------------
@@ -142,6 +284,7 @@ def assess_location(scene_id: str) -> dict[str, Any]:
 
     character_ids = scene.get("character_ids") or []
     prop_ids = scene.get("prop_ids") or []
+    location_name = location.get("name", "Unknown Location")
 
     # 2. Call Gemini for assessment
     client = _build_gemini_client()
@@ -149,7 +292,7 @@ def assess_location(scene_id: str) -> dict[str, Any]:
         scene_id=scene.get("scene_id"),
         scene_number=scene.get("scene_number"),
         location_id=location.get("location_id"),
-        location_name=location.get("name", "Unknown"),
+        location_name=location_name,
         location_type=location.get("location_type", "unknown"),
         weather_sensitivity=location.get("weather_sensitivity", False),
         cost_profile=float(location.get("cost_profile") or 0.0),
@@ -199,7 +342,15 @@ def assess_location(scene_id: str) -> dict[str, Any]:
         }
         graph.upsert_risk_flag(risk_record)
 
-    # 4. Log audit event
+    # 4. Check Grafana Observability Context via MCP
+    import asyncio
+    try:
+        observability_context = asyncio.run(check_observability_context(location_name))
+    except Exception as exc:
+        print(f"[location_agent] Warning: check_observability_context failed: {exc}")
+        observability_context = {"error": str(exc)}
+
+    # 5. Log audit event
     triggered_agents = ["risk"] if requires_risk_flag else []
     after_state = {
         "logistics_summary": logistics_summary,
@@ -207,6 +358,7 @@ def assess_location(scene_id: str) -> dict[str, Any]:
         "risk_reason": risk_reason,
         "requires_risk_flag": requires_risk_flag,
         "risk_flag_id": risk_flag_id,
+        "observability_context": observability_context,
     }
 
     graph.log_event(
@@ -220,12 +372,13 @@ def assess_location(scene_id: str) -> dict[str, Any]:
 
     assessment_result = {
         "location_id": location_id,
-        "location_name": location.get("name"),
+        "location_name": location_name,
         "logistics_summary": logistics_summary,
         "risk_level": risk_level,
         "risk_reason": risk_reason,
         "requires_risk_flag": requires_risk_flag,
         "risk_flag_id": risk_flag_id,
+        "observability_context": observability_context,
         "triggered_agents": triggered_agents,
     }
 
@@ -246,12 +399,12 @@ if __name__ == "__main__":
     result = assess_location(test_scene_id)
 
     print("\n[location_agent] Assessment Complete.")
-    print(f"Location ID        : {result.get('location_id')}")
-    print(f"Location Name      : {result.get('location_name')}")
-    print(f"Risk Level         : {result.get('risk_level').upper()}")
-    print(f"Requires Risk Flag : {result.get('requires_risk_flag')}")
-    print(f"Risk Flag ID       : {result.get('risk_flag_id')}")
-    print(f"Triggered Agents   : {result.get('triggered_agents')}")
+    print(f"Location ID           : {result.get('location_id')}")
+    print(f"Location Name         : {result.get('location_name')}")
+    print(f"Risk Level            : {result.get('risk_level').upper()}")
+    print(f"Requires Risk Flag    : {result.get('requires_risk_flag')}")
+    print(f"Risk Flag ID          : {result.get('risk_flag_id')}")
+    print(f"Triggered Agents      : {result.get('triggered_agents')}")
     print("\nLogistics Summary:")
     print("-" * 70)
     print(result.get('logistics_summary'))
@@ -260,3 +413,8 @@ if __name__ == "__main__":
     print("-" * 70)
     print(result.get('risk_reason'))
     print("-" * 70)
+    print("\nObservability Context (Grafana Cloud MCP):")
+    print("-" * 70)
+    print(json.dumps(result.get('observability_context'), indent=2))
+    print("-" * 70)
+
