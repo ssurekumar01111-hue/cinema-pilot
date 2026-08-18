@@ -179,9 +179,10 @@ async def check_observability_context(location_name: str) -> dict[str, Any]:
 
     # Check Prometheus metrics if available
     prom_tool = tools_by_name.get("list_prometheus_metric_names")
-    if prometheus_ds and prom_tool:
+    query_prom_tool = tools_by_name.get("query_prometheus")
+    if prometheus_ds:
         prom_uid = prometheus_ds[0].get("uid")
-        if prom_uid:
+        if prom_uid and prom_tool:
             try:
                 metrics_res = await prom_tool._run_async_impl(
                     args={"datasourceUid": prom_uid}, tool_context=None, credential=None
@@ -189,6 +190,22 @@ async def check_observability_context(location_name: str) -> dict[str, Any]:
                 queried_metrics.append(metrics_res)
             except Exception as exc:
                 print(f"[location_agent] Warning: list_prometheus_metric_names failed: {exc}")
+
+        if prom_uid and query_prom_tool:
+            try:
+                prom_query_res = await query_prom_tool._run_async_impl(
+                    args={
+                        "datasourceUid": prom_uid,
+                        "expr": "up",
+                        "endTime": "now",
+                        "queryType": "instant",
+                    },
+                    tool_context=None,
+                    credential=None,
+                )
+                queried_metrics.append(prom_query_res)
+            except Exception as exc:
+                print(f"[location_agent] Warning: query_prometheus failed: {exc}")
 
     # Check Loki logs if available
     loki_tool = tools_by_name.get("query_loki_logs")

@@ -197,13 +197,33 @@ def mitigate_risks(location_id: str) -> list[dict[str, Any]]:
         updated_records.append(full_record)
         print(f"  + [risk_agent] Updated {flag_id} (severity={severity})")
 
+        # Automatically escalate high-severity risks to Grafana Cloud Incident as part of the cascade
+        if severity == "high":
+            try:
+                print(f"  + [risk_agent] Automatically escalating high-severity risk '{flag_id}' to Grafana Cloud...")
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    import nest_asyncio
+                    nest_asyncio.apply()
+                    loop.run_until_complete(escalate_risk_to_grafana(flag_id))
+                else:
+                    asyncio.run(escalate_risk_to_grafana(flag_id))
+            except Exception as exc:
+                print(f"  + [risk_agent] Warning: Automatic Grafana escalation failed for '{flag_id}': {exc}")
+
     return updated_records
 
 
 from shared.grafana_client import get_grafana_toolset as _shared_get_grafana_toolset
 
 def get_grafana_toolset() -> McpToolset:
-    return _shared_get_grafana_toolset(tool_filter=["list_incidents", "create_incident"])
+    return _shared_get_grafana_toolset(
+        tool_filter=["list_incidents", "create_incident", "add_activity_to_incident", "get_incident"]
+    )
 
 
 async def escalate_risk_to_grafana(risk_flag_id: str) -> dict:
@@ -238,6 +258,8 @@ async def escalate_risk_to_grafana(risk_flag_id: str) -> dict:
 
     list_incidents_tool = tools_by_name.get("list_incidents")
     create_incident_tool = tools_by_name.get("create_incident")
+    add_activity_tool = tools_by_name.get("add_activity_to_incident")
+    get_incident_tool = tools_by_name.get("get_incident")
 
     # c. Check if incident already exists referencing risk_flag_id
     if list_incidents_tool:
@@ -258,8 +280,11 @@ async def escalate_risk_to_grafana(risk_flag_id: str) -> dict:
                             inc_title = str(inc.get("title", ""))
                             inc_desc = str(inc.get("description", ""))
                             if risk_flag_id in inc_title or risk_flag_id in inc_desc:
-                                inc_url = inc.get("url") or inc.get("html_url") or str(inc.get("id", ""))
+                                inc_url = inc.get("url") or inc.get("html_url") or json.dumps(inc)
                                 print(f"[risk_agent] Existing Grafana incident found for {risk_flag_id}: {inc_url}")
+                                updated_record = dict(risk_flag)
+                                updated_record["grafana_incident_url"] = inc_url
+                                graph.upsert_risk_flag(updated_record)
                                 return {"status": "already_exists", "grafana_incident_url": inc_url, "incident": inc}
                     except json.JSONDecodeError:
                         pass
@@ -272,7 +297,7 @@ async def escalate_risk_to_grafana(risk_flag_id: str) -> dict:
         print(f"[risk_agent] Existing incident URL recorded in graph: {existing_url}")
         return {"status": "already_exists", "grafana_incident_url": existing_url}
 
-    # d. Create new Grafana incident
+    # d. Create new Grafana incident with full context
     linked_entity_id = risk_flag.get("linked_entity_id", "unknown")
     description_text = risk_flag.get("description", "")
     
@@ -291,21 +316,44 @@ async def escalate_risk_to_grafana(risk_flag_id: str) -> dict:
     incident_response = await create_incident_tool._run_async_impl(
         args={
             "title": title,
+            "severity": "Critical",
             "roomPrefix": "cinemapilot",
+            "isDrill": False,
         },
         tool_context=None,
         credential=None,
     )
 
     incident_url = ""
+    incident_id = None
     content_list = incident_response.get("content", [])
     for c in content_list:
         if c.get("type") == "text":
             text = c.get("text", "")
-            if "url" in text or "http" in text:
+            if "url" in text or "http" in text or "incidentID" in text:
                 incident_url = text
+            try:
+                parsed_inc = json.loads(text)
+                incident_id = parsed_inc.get("incidentID") or parsed_inc.get("id")
+            except Exception:
+                pass
 
-    # e. Store incident URL back onto risk_flags record
+    # Post the full contextual description note directly onto the incident timeline
+    if incident_id and add_activity_tool:
+        try:
+            print(f"[risk_agent] Adding full context note to Grafana incident {incident_id} timeline...")
+            await add_activity_tool._run_async_impl(
+                args={
+                    "incidentId": str(incident_id),
+                    "body": full_description,
+                },
+                tool_context=None,
+                credential=None,
+            )
+        except Exception as exc:
+            print(f"[risk_agent] Warning: add_activity_to_incident failed: {exc}")
+
+    # e. Store incident URL/JSON back onto risk_flags record
     updated_record = dict(risk_flag)
     updated_record["grafana_incident_url"] = incident_url
     graph.upsert_risk_flag(updated_record)
@@ -316,7 +364,7 @@ async def escalate_risk_to_grafana(risk_flag_id: str) -> dict:
         entity_type="risk_flag",
         entity_id=risk_flag_id,
         before_state={"grafana_incident_url": None},
-        after_state={"grafana_incident_url": incident_url},
+        after_state={"grafana_incident_url": incident_url, "full_description": full_description},
         triggered_agents=[],
     )
 

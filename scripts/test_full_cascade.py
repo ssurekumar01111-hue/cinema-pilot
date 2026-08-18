@@ -71,6 +71,14 @@ def main():
     )
     print(f"Reset scene_005 location_id -> 'loc_millbrook_storage_unit' (Event ID: {reset_event_id})")
 
+    # Reset risk flag for Sunset Beach so Risk Agent tests mitigation & escalation from scratch
+    rf_beach = graph_client.get_risk_flag("rf_loc_loc_sunset_beach")
+    if rf_beach:
+        rf_beach["mitigation"] = ""
+        rf_beach["grafana_incident_url"] = None
+        graph_client.upsert_risk_flag(rf_beach)
+        print("Reset rf_loc_loc_sunset_beach mitigation -> '' and grafana_incident_url -> None")
+
     # Brief pause to ensure timestamp spacing in BigQuery
     time.sleep(2)
 
