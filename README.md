@@ -97,10 +97,16 @@ scripts/
    gsutil mb -l US -b on gs://<your-bucket-name>
    ```
 
-5. **Grafana Cloud**
+5. **Grafana Cloud & OpenTelemetry**
    - Create a free account at [grafana.com/products/cloud](https://grafana.com/products/cloud/)
    - As the stack admin, open the Grafana Assistant once to accept its terms (required before MCP access works)
    - Run the one-time OAuth bootstrap: `python infra/grafana_oauth_bootstrap.py` — this opens your browser once to authorize; the token is cached locally in `~/.cinemapilot/grafana_mcp_token.json` and refreshes automatically for 30 days.
+   - **OpenTelemetry Metrics Export**: Under Grafana Cloud Portal → **Administration** → **Users and access** → **Access Policies** (or **Connections** → **OpenTelemetry**), create an Access Policy with `metrics:write` and `traces:write` scopes, generate a token, and set the environment variables:
+     ```bash
+     export GRAFANA_CLOUD_OTLP_TOKEN="<your_grafana_cloud_access_policy_token>"
+     export GRAFANA_CLOUD_INSTANCE_ID="<your_grafana_instance_id>" # e.g. 3419920
+     ```
+     *(If unset, telemetry automatically falls back to local console/in-memory logging without interrupting execution).*
 
 6. **Update project-specific constants** — `PROJECT`/`DATASET`/`BUCKET_NAME` in `shared/graph_client/__init__.py` and `shared/asset_storage/__init__.py`, and your Grafana stack URL in `shared/grafana_client.py`.
 

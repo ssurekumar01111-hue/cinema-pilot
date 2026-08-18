@@ -21,11 +21,17 @@ from google.genai import types
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from shared.graph_client import ProductionGraphClient
+from shared.telemetry import instrument_agent
 
 
-def direct_scene(scene_id: str) -> dict[str, Any]:
+@instrument_agent("director_agent")
+def direct_scene(scene_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
     Generate director guidance (shot suggestions, pacing notes, camera plan) for a scene ID.
+
+    Args:
+      scene_id: Unique scene identifier (e.g. "scene_005").
+      cascade_id: Optional correlation ID for the multi-agent cascade run.
 
     Steps:
       a. Fetches scene and location records from BigQuery Production Graph.

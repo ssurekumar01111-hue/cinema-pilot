@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from shared.asset_storage import AssetStorageClient
 from shared.graph_client import ProductionGraphClient
+from shared.telemetry import instrument_agent
 
 
 def construct_imagen_prompt(scene: dict, location: dict | None, characters: list[dict]) -> str:
@@ -69,9 +70,14 @@ def construct_imagen_prompt(scene: dict, location: dict | None, characters: list
     return " ".join(prompt_parts)
 
 
-def generate_storyboard(scene_id: str) -> dict[str, Any]:
+@instrument_agent("storyboard_agent", asset_type="image")
+def generate_storyboard(scene_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
     Generate a storyboard image panel for a given scene ID using Imagen 3.
+
+    Args:
+      scene_id: Unique scene identifier (e.g. "scene_005").
+      cascade_id: Optional correlation ID for the multi-agent cascade run.
 
     Steps:
       a. Fetches scene, location, and characters from BigQuery Production Graph.

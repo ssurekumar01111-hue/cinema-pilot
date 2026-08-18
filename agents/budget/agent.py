@@ -35,6 +35,7 @@ from google import genai
 from google.genai import types
 
 from shared.graph_client import ProductionGraphClient, GraphClientError
+from shared.telemetry import instrument_agent
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -106,12 +107,14 @@ def _strip_code_fences(text: str) -> str:
 # Main Agent Function
 # ---------------------------------------------------------------------------
 
-def recalculate_budget(scene_id: str) -> dict[str, Any]:
+@instrument_agent("budget_agent")
+def recalculate_budget(scene_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
     Recalculate the location budget line item for a given scene.
 
     Args:
         scene_id: Unique ID of the scene (e.g. "scene_005").
+        cascade_id: Optional correlation ID for the multi-agent cascade run.
 
     Returns:
         The budget_line dict written to the Production Graph.

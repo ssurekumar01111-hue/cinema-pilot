@@ -19,11 +19,13 @@ import json
 import os
 import sys
 import time
+import uuid
 
 # Ensure cinemapilot directory is in path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 
 from shared.graph_client import ProductionGraphClient
+from shared.telemetry import record_cascade_status, flush_telemetry
 from agents.change_detection.agent import detect_changes
 from agents.budget.agent import recalculate_budget
 from agents.location.agent import assess_location
@@ -38,9 +40,11 @@ from agents.explanation.agent import explain_change
 def main():
     graph_client = ProductionGraphClient()
     cascade_start_real = time.time()
+    cascade_id = f"cascade-{uuid.uuid4().hex[:8]}"
 
     print("=" * 80)
     print("STARTING CINEMAPILOT FULL END-TO-END INTEGRATION TEST")
+    print(f"Active Cascade Correlation ID: {cascade_id}")
     print("=" * 80)
 
     # -------------------------------------------------------------------------
@@ -114,7 +118,7 @@ def main():
     print("STEP 3: CHANGE DETECTION")
     print("=" * 80)
 
-    cd_results = detect_changes(since_timestamp=trigger_timestamp)
+    cd_results = detect_changes(since_timestamp=trigger_timestamp, cascade_id=cascade_id)
     print(f"Change Detection Results ({len(cd_results)} change(s) detected):")
     for res in cd_results:
         print(f"  Entity Type:      {res.get('entity_type')}")
@@ -133,7 +137,7 @@ def main():
     # 4a. Budget Agent
     print("\n--- 4a. Budget Agent (recalculate_budget) ---")
     t0 = time.time()
-    b_res = recalculate_budget("scene_005")
+    b_res = recalculate_budget("scene_005", cascade_id=cascade_id)
     print(f"Completed in {time.time() - t0:.2f}s:")
     print(f"  Budget Line ID: {b_res.get('budget_line_id')}")
     print(f"  Amount:         ${b_res.get('amount', 0.0):,.2f}")
@@ -142,7 +146,7 @@ def main():
     # 4b. Location Agent
     print("\n--- 4b. Location Agent (assess_location) ---")
     t0 = time.time()
-    l_res = assess_location("scene_005")
+    l_res = assess_location("scene_005", cascade_id=cascade_id)
     print(f"Completed in {time.time() - t0:.2f}s:")
     print(f"  Risk Flag ID:   {l_res.get('risk_flag_id')}")
     print(f"  Location ID:    {l_res.get('location_id')}")
@@ -152,7 +156,7 @@ def main():
     # 4c. Risk Agent
     print("\n--- 4c. Risk Agent (mitigate_risks) ---")
     t0 = time.time()
-    r_res = mitigate_risks("loc_sunset_beach")
+    r_res = mitigate_risks("loc_sunset_beach", cascade_id=cascade_id)
     print(f"Completed in {time.time() - t0:.2f}s:")
     print(f"  Mitigated Count: {len(r_res)}")
     for rf in r_res:
@@ -162,7 +166,7 @@ def main():
     # 4d. Schedule Agent
     print("\n--- 4d. Schedule Agent (reschedule_shoot) ---")
     t0 = time.time()
-    s_res = reschedule_shoot("scene_005")
+    s_res = reschedule_shoot("scene_005", cascade_id=cascade_id)
     print(f"Completed in {time.time() - t0:.2f}s:")
     print(f"  Schedule Block ID: {s_res.get('schedule_block_id')}")
     print(f"  Day Index:         {s_res.get('day_index')}")
@@ -172,7 +176,7 @@ def main():
     # 4e. Storyboard Agent
     print("\n--- 4e. Storyboard Agent (generate_storyboard) ---")
     t0 = time.time()
-    sb_res = generate_storyboard("scene_005")
+    sb_res = generate_storyboard("scene_005", cascade_id=cascade_id)
     print(f"Completed in {time.time() - t0:.2f}s:")
     print(f"  Storyboard ID: {sb_res.get('storyboard_id')}")
     print(f"  GS URI:        {sb_res.get('gs_uri')}")
@@ -181,7 +185,7 @@ def main():
     # 4f. Music Agent
     print("\n--- 4f. Music Agent (generate_music_cue) ---")
     t0 = time.time()
-    m_res = generate_music_cue("scene_005")
+    m_res = generate_music_cue("scene_005", cascade_id=cascade_id)
     print(f"Completed in {time.time() - t0:.2f}s:")
     print(f"  Music Cue ID:  {m_res.get('music_cue_id')}")
     print(f"  Status:        {m_res.get('status')}")
@@ -196,7 +200,7 @@ def main():
     print("=" * 80)
 
     t0 = time.time()
-    po_res = producer_overview("scene_005")
+    po_res = producer_overview("scene_005", cascade_id=cascade_id)
     print(f"Completed in {time.time() - t0:.2f}s:")
     print(f"  Producer Overview ID: {po_res.get('producer_overview_id')}")
     print(f"  Total Budget Impact:  ${po_res.get('total_budget_impact', 0.0):,.2f}")
@@ -213,14 +217,14 @@ def main():
     print("=" * 80)
 
     t0 = time.time()
-    exp_res = explain_change("scene_005")
+    exp_res = explain_change("scene_005", cascade_id=cascade_id)
     print(f"Completed in {time.time() - t0:.2f}s:")
     print(f"  Explanation ID: {exp_res.get('explanation_id')}")
     print(f"  Sources Used:   {exp_res.get('sources_used')}")
     print(f"\nNarrative:\n{exp_res.get('narrative')}")
 
     # -------------------------------------------------------------------------
-    # STEP 7 — Full Audit Trail
+    # STEP 7 — Full Audit Trail & Telemetry Flush
     # -------------------------------------------------------------------------
     print("\n" + "=" * 80)
     print("STEP 7: FULL PRODUCTION GRAPH AUDIT TRAIL")
@@ -237,6 +241,11 @@ def main():
         print(f"    Before State:     {ev.get('before_state')[:120]}..." if len(str(ev.get('before_state'))) > 120 else f"    Before State:     {ev.get('before_state')}")
         print(f"    After State:      {ev.get('after_state')[:120]}..." if len(str(ev.get('after_state'))) > 120 else f"    After State:      {ev.get('after_state')}")
         print("-" * 60)
+
+    # Record healthy cascade status and flush all OpenTelemetry metrics to Grafana Cloud
+    record_cascade_status(cascade_id, is_healthy=True)
+    flush_telemetry(timeout_millis=10000)
+    print(f"\n[telemetry] Successfully flushed OpenTelemetry cascade metrics for '{cascade_id}' to Grafana Cloud.")
 
     total_elapsed = time.time() - cascade_start_real
     print("=" * 80)

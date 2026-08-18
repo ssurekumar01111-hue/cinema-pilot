@@ -22,11 +22,17 @@ from google.genai import types
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from shared.graph_client import ProductionGraphClient
+from shared.telemetry import instrument_agent
 
 
-def generate_character_sheet(character_id: str) -> dict[str, Any]:
+@instrument_agent("casting_agent")
+def generate_character_sheet(character_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
     Generate a structured character sheet for a given character ID using Gemini.
+
+    Args:
+      character_id: Unique character identifier (e.g. "char_dr_nadia_voss").
+      cascade_id: Optional correlation ID for the multi-agent cascade run.
 
     Steps:
       a. Fetches character record via get_character(character_id).

@@ -44,6 +44,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from shared.graph_client import ProductionGraphClient, GraphClientError
+from shared.telemetry import instrument_agent
 
 # ---------------------------------------------------------------------------
 # Trigger rule table
@@ -196,7 +197,8 @@ def _compute_triggered_agents(entity_type: str, changed_fields: set[str]) -> lis
 # Main detection function
 # ---------------------------------------------------------------------------
 
-def detect_changes(since_timestamp: datetime) -> list[dict]:
+@instrument_agent("change_detection_agent")
+def detect_changes(since_timestamp: datetime, cascade_id: str | None = None) -> list[dict]:
     """
     Poll the Production Graph events table for changes since a given time
     and compute which downstream agents should be triggered for each.

@@ -36,6 +36,7 @@ from google import genai
 from google.genai import types
 
 from shared.graph_client import ProductionGraphClient, GraphClientError
+from shared.telemetry import instrument_agent
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -434,7 +435,8 @@ def _deduplicate_props(extracted: dict) -> None:
 # Main ingestion function
 # ---------------------------------------------------------------------------
 
-def ingest_screenplay(filepath: str) -> dict:
+@instrument_agent("script_intelligence_agent")
+def ingest_screenplay(filepath: str, cascade_id: str | None = None) -> dict:
     """
     Read a screenplay file, extract entities via Gemini, and write to the
     Production Graph.

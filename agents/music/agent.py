@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from shared.asset_storage import AssetStorageClient
 from shared.graph_client import ProductionGraphClient
+from shared.telemetry import instrument_agent
 
 
 def construct_lyria_prompt(scene: dict, location: dict | None) -> str:
@@ -50,9 +51,14 @@ def construct_lyria_prompt(scene: dict, location: dict | None) -> str:
     return " ".join(prompt_parts)
 
 
-def generate_music_cue(scene_id: str) -> dict[str, Any]:
+@instrument_agent("music_agent", asset_type="audio")
+def generate_music_cue(scene_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
     Generate a music cue audio clip for a given scene ID using Lyria 3.
+
+    Args:
+      scene_id: Unique scene identifier (e.g. "scene_005").
+      cascade_id: Optional correlation ID for the multi-agent cascade run.
 
     Steps:
       a. Fetches scene and location.

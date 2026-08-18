@@ -22,11 +22,17 @@ from google.genai import types
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from shared.graph_client import ProductionGraphClient
+from shared.telemetry import instrument_agent
 
 
-def producer_overview(scene_id: str) -> dict[str, Any]:
+@instrument_agent("producer_agent")
+def producer_overview(scene_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
     Generate an executive producer overview for a scene ID using Gemini.
+
+    Args:
+      scene_id: Unique scene identifier (e.g. "scene_005").
+      cascade_id: Optional correlation ID for the multi-agent cascade run.
 
     Steps:
       a. Fetches scene, location, budget_lines, schedule_blocks, and risk_flags.

@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from shared.asset_storage import AssetStorageClient
 from shared.graph_client import ProductionGraphClient
+from shared.telemetry import instrument_agent
 
 # Prebuilt voice map for characters to ensure distinct voices
 PREBUILT_VOICES = [
@@ -35,9 +36,14 @@ PREBUILT_VOICES = [
 ]
 
 
-def generate_dialogue_preview(scene_id: str) -> dict[str, Any]:
+@instrument_agent("voice_agent", asset_type="audio")
+def generate_dialogue_preview(scene_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
     Generate a multi-speaker audio dialogue preview for a given scene ID.
+
+    Args:
+      scene_id: Unique scene identifier (e.g. "scene_005").
+      cascade_id: Optional correlation ID for the multi-agent cascade run.
 
     Steps:
       a. Fetches scene and its characters (via character_ids).

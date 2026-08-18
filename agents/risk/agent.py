@@ -36,6 +36,7 @@ from google import genai
 from google.genai import types
 
 from shared.graph_client import ProductionGraphClient, GraphClientError
+from shared.telemetry import instrument_agent
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -104,12 +105,14 @@ def _strip_code_fences(text: str) -> str:
 # Main Agent Function
 # ---------------------------------------------------------------------------
 
-def mitigate_risks(location_id: str) -> list[dict[str, Any]]:
+@instrument_agent("risk_agent")
+def mitigate_risks(location_id: str, cascade_id: str | None = None) -> list[dict[str, Any]]:
     """
     Find unmitigated risk flags linked to location_id and generate mitigations for them.
 
     Args:
         location_id: Unique ID of the location (e.g. "loc_sunset_beach").
+        cascade_id: Optional correlation ID for the multi-agent cascade run.
 
     Returns:
         List of updated risk flag dicts containing the newly generated mitigations.

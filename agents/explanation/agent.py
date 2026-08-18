@@ -22,11 +22,17 @@ from google.genai import types
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from shared.graph_client import ProductionGraphClient
+from shared.telemetry import instrument_agent
 
 
-def explain_change(scene_id: str) -> dict[str, Any]:
+@instrument_agent("explanation_agent")
+def explain_change(scene_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
     Synthesize a producer-facing narrative explaining changes for a scene ID.
+
+    Args:
+      scene_id: Unique scene identifier (e.g. "scene_005").
+      cascade_id: Optional correlation ID for the multi-agent cascade run.
 
     Steps:
       a. Fetches logged reasoning produced by other agents for this scene & location:

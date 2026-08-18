@@ -35,6 +35,7 @@ from google import genai
 from google.genai import types
 
 from shared.graph_client import ProductionGraphClient, GraphClientError
+from shared.telemetry import instrument_agent
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -270,12 +271,14 @@ async def check_observability_context(location_name: str) -> dict[str, Any]:
 # Main Agent Function
 # ---------------------------------------------------------------------------
 
-def assess_location(scene_id: str) -> dict[str, Any]:
+@instrument_agent("location_agent")
+def assess_location(scene_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
     Assess location logistics and risks for a given scene.
 
     Args:
         scene_id: Unique ID of the scene (e.g. "scene_005").
+        cascade_id: Optional correlation ID for the multi-agent cascade run.
 
     Returns:
         The assessment dict including logistics_summary, risk_level, risk_reason, requires_risk_flag.
