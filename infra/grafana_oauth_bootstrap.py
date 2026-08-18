@@ -124,6 +124,9 @@ def run_oauth_flow() -> dict:
 
 def save_token(token_data: dict) -> Path:
     """Save token dict to ~/.cinemapilot/grafana_mcp_token.json."""
+    import time
+    if "issued_at" not in token_data:
+        token_data["issued_at"] = time.time()
     _CINEMAPILOT_DIR.mkdir(parents=True, exist_ok=True)
     with open(_TOKEN_FILE, "w", encoding="utf-8") as f:
         json.dump(token_data, f, indent=2)
