@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CinemaPilot Production Graph & Cascade Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand-logo">🎬</div>
+      <div class="brand-title">
+        CinemaPilot
+        <span class="brand-badge">Production Graph</span>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <nav class="nav-tabs">
+        <button id="tab-scenes-btn" class="tab-btn active" onclick="switchTab('scenes')">
+          <span>🎬 Scene Graph</span>
+        </button>
+        <button id="tab-timeline-btn" class="tab-btn" onclick="switchTab('timeline')">
+          <span>⚡ Cascade Timeline</span>
+          <span id="events-count-badge" class="tab-badge">0</span>
+        </button>
+      </nav>
+
+      <button id="refresh-btn" class="btn-refresh" onclick="refreshCurrentView()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+        </svg>
+        <span>Refresh</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- App Container -->
+  <div class="app-container">
+    
+    <!-- Left Sidebar: Scenes List -->
+    <aside class="scenes-sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Screenplay Scenes</span>
+        <span id="scene-counter" class="scene-count-badge">Loading...</span>
+      </div>
+      <div id="scenes-list" class="scenes-list">
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <span>Loading Production Graph...</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main id="main-content" class="main-content-view">
+      
+      <!-- Scene Detail Container -->
+      <div id="scene-detail-container">
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <span>Select a scene from the left to inspect its cascade...</span>
+        </div>
+      </div>
+
+      <!-- Timeline Container (Hidden by default) -->
+      <div id="timeline-view-container" style="display: none;">
+        <div class="timeline-container">
+          <div class="cascade-section-heading">
+            <span>⚡ Audit Event Cascade Stream</span>
+          </div>
+          <div id="timeline-events-list">
+            <div class="loading-state">
+              <div class="spinner"></div>
+              <span>Fetching audit events...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
