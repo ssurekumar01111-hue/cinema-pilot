@@ -2,9 +2,11 @@
 agents/storyboard/agent.py
 
 Storyboard Agent for CinemaPilot.
-Generates storyboard panel images for production scenes using Imagen 3 on Vertex AI,
-stores generated images in GCS, upserts metadata into BigQuery Production Graph,
-and logs state change events.
+Generates storyboard panel images for production scenes using Gemini native image
+generation (gemini-3.1-flash-image via Gemini Developer API), stores generated images
+in GCS, upserts metadata into BigQuery Production Graph, and logs state change events.
+
+The agent reads GEMINI_API_KEY from the environment (Gemini Developer API key).
 """
 
 from __future__ import annotations
@@ -13,8 +15,8 @@ import os
 import sys
 from typing import Any
 
-import vertexai
-from vertexai.preview.vision_models import ImageGenerationModel
+from google import genai
+from google.genai import types as genai_types
 
 # Ensure shared package is importable when running directly
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
@@ -22,6 +24,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from shared.asset_storage import AssetStorageClient
 from shared.graph_client import ProductionGraphClient
 from shared.telemetry import instrument_agent
+
+# Gemini image generation model — produces ~850 KB real JPEG images
+_IMAGE_MODEL = "models/gemini-3.1-flash-image"
 
 
 def construct_imagen_prompt(scene: dict, location: dict | None, characters: list[dict]) -> str:
@@ -111,32 +116,42 @@ def generate_storyboard(scene_id: str, cascade_id: str | None = None) -> dict[st
     # b. Construct grounded prompt
     prompt = construct_imagen_prompt(scene, location, characters)
 
-    # c. Call Imagen 3 via Vertex AI SDK (with fallback mock image if endpoint not found)
+    # c. Generate storyboard image via Gemini native image generation
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
+    if not gemini_api_key:
+        raise RuntimeError(
+            "GEMINI_API_KEY environment variable is not set. "
+            "Set it to your Gemini Developer API key to enable storyboard image generation."
+        )
+    image_client = genai.Client(api_key=gemini_api_key)
+    response = image_client.models.generate_content(
+        model=_IMAGE_MODEL,
+        contents=prompt,
+        config=genai_types.GenerateContentConfig(
+            response_modalities=["IMAGE", "TEXT"],
+        ),
+    )
     image_bytes = None
-    try:
-        vertexai.init(project=ProductionGraphClient.PROJECT, location="us-central1")
-        model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-002")
-        images = model.generate_images(
-            prompt=prompt,
-            number_of_images=1,
-            aspect_ratio="16:9",
+    image_mime = "image/jpeg"
+    for part in response.candidates[0].content.parts:
+        if hasattr(part, "inline_data") and part.inline_data and part.inline_data.data:
+            image_bytes = part.inline_data.data
+            image_mime = part.inline_data.mime_type or "image/jpeg"
+            break
+    if not image_bytes:
+        raise RuntimeError(
+            f"Gemini image model returned no image data for scene '{scene_id}'. "
+            f"Response text: {response.text[:200] if response.text else 'N/A'}"
         )
-        if images:
-            image_bytes = images[0]._image_bytes
-    except Exception as exc:
-        # Fallback PNG image bytes (1x1 red PNG) if Imagen API endpoint is unavailable in project
-        image_bytes = (
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
-            b"\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0\xc0\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
+    ext = "jpg" if "jpeg" in image_mime else "png"
 
     # d. Upload image bytes via AssetStorageClient
     gs_uri = storage_client.upload_asset(
         entity_type="storyboard",
         entity_id=scene_id,
         asset_bytes=image_bytes,
-        content_type="image/png",
-        extension="png",
+        content_type=image_mime,
+        extension=ext,
     )
 
     # e. Upsert storyboard record into BigQuery storyboards table
