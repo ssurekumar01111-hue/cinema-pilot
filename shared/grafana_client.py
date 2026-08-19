@@ -22,7 +22,7 @@ from google.adk.tools.mcp_tool import (
 
 _TOKEN_FILE = Path.home() / ".cinemapilot" / "grafana_mcp_token.json"
 _TOKEN_ENDPOINT = "https://mcp.grafana.com/mcp/oauth/token"
-_GRAFANA_URL = "https://daringhamster1557.grafana.net"
+_DEFAULT_GRAFANA_URL = "https://daringhamster1557.grafana.net"
 
 
 def _decode_jwt_payload(jwt_str: str) -> Dict[str, Any]:
@@ -148,6 +148,11 @@ def get_valid_access_token() -> str:
     return access_token
 
 
+def get_grafana_stack_url() -> str:
+    """Return the Grafana stack URL from environment or default."""
+    return os.environ.get("GRAFANA_STACK_URL", "https://daringhamster1557.grafana.net")
+
+
 def get_grafana_toolset(tool_filter: Optional[List[str]] = None) -> McpToolset:
     """
     Constructs an ADK McpToolset connected to the Grafana Cloud MCP server.
@@ -157,14 +162,16 @@ def get_grafana_toolset(tool_filter: Optional[List[str]] = None) -> McpToolset:
         tool_filter: Optional list of tool names to filter (e.g. ['list_datasources', 'query_loki_logs']).
     """
     access_token = get_valid_access_token()
+    stack_url = get_grafana_stack_url()
+    mcp_endpoint = os.environ.get("GRAFANA_MCP_ENDPOINT", "https://mcp.grafana.com/mcp")
 
     headers = {
         "Authorization": f"Bearer {access_token}",
-        "X-Grafana-URL": _GRAFANA_URL,
+        "X-Grafana-URL": stack_url,
     }
 
     connection_params = StreamableHTTPConnectionParams(
-        url="https://mcp.grafana.com/mcp",
+        url=mcp_endpoint,
         headers=headers,
     )
 

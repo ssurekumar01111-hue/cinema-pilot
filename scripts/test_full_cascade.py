@@ -25,7 +25,12 @@ import uuid
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 
 from shared.graph_client import ProductionGraphClient
-from shared.telemetry import record_cascade_status, flush_telemetry
+from shared.telemetry import (
+    record_cascade_status,
+    flush_telemetry,
+    has_cascade_failures,
+    get_cascade_failure_count,
+)
 from agents.change_detection.agent import detect_changes
 from agents.budget.agent import recalculate_budget
 from agents.location.agent import assess_location
@@ -242,10 +247,15 @@ def main():
         print(f"    After State:      {ev.get('after_state')[:120]}..." if len(str(ev.get('after_state'))) > 120 else f"    After State:      {ev.get('after_state')}")
         print("-" * 60)
 
-    # Record healthy cascade status and flush all OpenTelemetry metrics to Grafana Cloud
-    record_cascade_status(cascade_id, is_healthy=True)
+    # Record cascade status based on real outcome:
+    # If any agent in the cascade raised an exception, is_healthy=False (0=degraded), else True (1=healthy)
+    cascade_healthy = not has_cascade_failures(cascade_id)
+    failure_count = get_cascade_failure_count(cascade_id)
+    record_cascade_status(cascade_id, is_healthy=cascade_healthy)
     flush_telemetry(timeout_millis=10000)
-    print(f"\n[telemetry] Successfully flushed OpenTelemetry cascade metrics for '{cascade_id}' to Grafana Cloud.")
+    status_label = "HEALTHY (1)" if cascade_healthy else f"DEGRADED (0) — {failure_count} agent failure(s) recorded"
+    print(f"\n[telemetry] Cascade Health Status: {status_label}")
+    print(f"[telemetry] Successfully flushed OpenTelemetry cascade metrics for '{cascade_id}' to Grafana Cloud.")
 
     total_elapsed = time.time() - cascade_start_real
     print("=" * 80)

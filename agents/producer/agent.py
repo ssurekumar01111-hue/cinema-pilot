@@ -19,7 +19,7 @@ from google import genai
 from google.genai import types
 
 from shared.graph_client import ProductionGraphClient
-from shared.grafana_client import get_grafana_toolset
+from shared.grafana_client import get_grafana_toolset, get_grafana_stack_url
 from shared.telemetry import instrument_agent
 
 
@@ -27,7 +27,7 @@ def check_production_readiness(scene_id: str, location_id: str, cascade_id: str 
     """
     Evaluate production readiness against real Grafana signals:
     1. Queries Grafana Cloud Incidents via MCP to check for active unresolved incidents on this location.
-    2. Queries Prometheus telemetry for agent failures in this cascade run.
+    2. Queries Prometheus telemetry for agent failures in this cascade run (discovering datasource dynamically).
 
     Args:
         scene_id: Scene ID being evaluated.
@@ -35,7 +35,7 @@ def check_production_readiness(scene_id: str, location_id: str, cascade_id: str 
         cascade_id: Optional correlation ID for this cascade.
 
     Returns:
-        Dict with keys: ready (bool), readiness_status ("ready"|"blocked"),
+        Dict with keys: ready (bool), readiness_status ("ready"|"blocked"|"unknown"),
         blocking_reasons (list[str]), active_incident_url (str|None),
         active_incident_id (str|None), cascade_had_failures (bool).
     """
@@ -46,9 +46,18 @@ def check_production_readiness(scene_id: str, location_id: str, cascade_id: str 
         active_incident_url: str | None = None
         active_incident_id: str | None = None
         cascade_had_failures: bool = False
+        query_error: bool = False
 
-        toolset = get_grafana_toolset(tool_filter=["list_incidents", "query_prometheus"])
-        tools = {t.name: t for t in await toolset.get_tools()}
+        try:
+            toolset = get_grafana_toolset(tool_filter=["list_incidents", "query_prometheus", "list_datasources"])
+            tools = {t.name: t for t in await toolset.get_tools()}
+        except Exception as exc:
+            print(f"[producer_agent] Warning: Failed to initialize Grafana toolset: {exc}")
+            query_error = True
+            blocking_reasons.append(
+                f"Could not verify Grafana incident/telemetry status — readiness cannot be confirmed ({exc})."
+            )
+            tools = {}
 
         # 1. Check for active unresolved Grafana incidents for this location
         list_incidents_tool = tools.get("list_incidents")
@@ -59,62 +68,133 @@ def check_production_readiness(scene_id: str, location_id: str, cascade_id: str 
                     tool_context=None,
                     credential=None,
                 )
-                for c in resp.get("content", []):
-                    if c.get("type") == "text":
-                        try:
-                            inc_data = json.loads(c.get("text", "{}"))
-                            incidents = inc_data.get("incidents", [])
-                            for inc in incidents:
-                                inc_status = str(inc.get("status", "")).lower()
-                                if inc_status != "active":
-                                    continue
-                                inc_title = str(inc.get("title", ""))
-                                inc_desc = str(inc.get("description", ""))
-                                if location_id in inc_title or location_id in inc_desc:
-                                    inc_id = str(inc.get("incidentId") or inc.get("incidentID") or inc.get("id") or "")
-                                    active_incident_id = inc_id
-                                    active_incident_url = inc.get("url") or inc.get("html_url") or f"https://daringhamster1557.grafana.net/a/grafana-irm-app/incidents/{inc_id}"
-                                    blocking_reasons.append(
-                                        f"Active Grafana incident #{inc_id} for {location_id} has not been resolved: '{inc_title}'"
-                                    )
-                                    break
-                        except json.JSONDecodeError:
-                            pass
+                if isinstance(resp, dict) and resp.get("isError"):
+                    query_error = True
+                    err_msg = ""
+                    for c in resp.get("content", []):
+                        if c.get("type") == "text":
+                            err_msg += c.get("text", "")
+                    blocking_reasons.append(
+                        f"Could not verify Grafana incident status — MCP tool returned error: {err_msg or 'isError=True'}."
+                    )
+                else:
+                    for c in resp.get("content", []):
+                        if c.get("type") == "text":
+                            try:
+                                inc_data = json.loads(c.get("text", "{}"))
+                                incidents = inc_data.get("incidents", [])
+                                for inc in incidents:
+                                    inc_status = str(inc.get("status", "")).lower()
+                                    if inc_status != "active":
+                                        continue
+                                    inc_title = str(inc.get("title", ""))
+                                    inc_desc = str(inc.get("description", ""))
+                                    if location_id in inc_title or location_id in inc_desc:
+                                        inc_id = str(inc.get("incidentId") or inc.get("incidentID") or inc.get("id") or "")
+                                        active_incident_id = inc_id
+                                        active_incident_url = inc.get("url") or inc.get("html_url") or f"{get_grafana_stack_url()}/a/grafana-irm-app/incidents/{inc_id}"
+                                        blocking_reasons.append(
+                                            f"Active Grafana incident #{inc_id} for {location_id} has not been resolved: '{inc_title}'"
+                                        )
+                                        break
+                            except json.JSONDecodeError as jde:
+                                query_error = True
+                                blocking_reasons.append(
+                                    f"Could not verify Grafana incident status — invalid JSON response ({jde})."
+                                )
             except Exception as exc:
                 print(f"[producer_agent] Warning: list_incidents check failed: {exc}")
-
-        # 2. Check cascade telemetry failures in Prometheus
-        if cascade_id and tools.get("query_prometheus"):
-            try:
-                prom_tool = tools["query_prometheus"]
-                q_expr = f'cinemapilot_agent_failures_total{{cascade_id="{cascade_id}"}}'
-                p_resp = await prom_tool._run_async_impl(
-                    args={"datasourceUid": "grafanacloud-prom", "expr": q_expr, "endTime": "now", "queryType": "instant"},
-                    tool_context=None,
-                    credential=None,
+                query_error = True
+                blocking_reasons.append(
+                    f"Could not verify Grafana incident status — readiness cannot be confirmed ({exc})."
                 )
-                for c in p_resp.get("content", []):
-                    if c.get("type") == "text":
-                        try:
-                            p_data = json.loads(c.get("text", "{}"))
-                            res_list = p_data.get("data", {}).get("result", [])
-                            failing_agents = []
-                            for item in res_list:
-                                val = float(item.get("value", [0, 0])[1])
-                                if val > 0:
-                                    failing_agents.append(item.get("metric", {}).get("agent", "unknown"))
-                            if failing_agents:
-                                cascade_had_failures = True
-                                blocking_reasons.append(
-                                    f"Agent failure(s) detected during cascade '{cascade_id}': {', '.join(failing_agents)}"
-                                )
-                        except Exception:
-                            pass
-            except Exception as exc:
-                print(f"[producer_agent] Warning: telemetry query failed: {exc}")
+        elif not list_incidents_tool and location_id:
+            query_error = True
+            blocking_reasons.append(
+                "Could not verify Grafana incident status — list_incidents tool unavailable."
+            )
 
-        ready = len(blocking_reasons) == 0
-        readiness_status = "ready" if ready else "blocked"
+        # 2. Check cascade telemetry failures in Prometheus (dynamic datasource discovery)
+        if cascade_id:
+            prom_tool = tools.get("query_prometheus")
+            list_ds_tool = tools.get("list_datasources")
+            if prom_tool:
+                # Discover Prometheus datasource dynamically or fallback to env var
+                prom_uid = os.environ.get("GRAFANA_PROMETHEUS_UID")
+                if not prom_uid and list_ds_tool:
+                    try:
+                        ds_res = await list_ds_tool._run_async_impl(args={}, tool_context=None, credential=None)
+                        if isinstance(ds_res, dict) and not ds_res.get("isError"):
+                            for c in ds_res.get("content", []):
+                                if c.get("type") == "text":
+                                    try:
+                                        parsed = json.loads(c.get("text", "{}"))
+                                        datasources = parsed.get("datasources", parsed if isinstance(parsed, list) else [])
+                                        for ds in datasources:
+                                            if "prometheus" in str(ds.get("type", "")).lower() and ds.get("uid"):
+                                                prom_uid = ds.get("uid")
+                                                break
+                                    except json.JSONDecodeError:
+                                        pass
+                    except Exception as exc:
+                        print(f"[producer_agent] Warning: list_datasources discovery failed: {exc}")
+
+                if not prom_uid:
+                    prom_uid = os.environ.get("GRAFANA_PROMETHEUS_UID", "grafanacloud-prom")
+
+                try:
+                    q_expr = f'cinemapilot_agent_failures_total{{cascade_id="{cascade_id}"}}'
+                    p_resp = await prom_tool._run_async_impl(
+                        args={"datasourceUid": prom_uid, "expr": q_expr, "endTime": "now", "queryType": "instant"},
+                        tool_context=None,
+                        credential=None,
+                    )
+                    if isinstance(p_resp, dict) and p_resp.get("isError"):
+                        query_error = True
+                        p_err = ""
+                        for c in p_resp.get("content", []):
+                            if c.get("type") == "text":
+                                p_err += c.get("text", "")
+                        blocking_reasons.append(
+                            f"Could not verify Grafana telemetry status — MCP tool returned error: {p_err or 'isError=True'}."
+                        )
+                    else:
+                        for c in p_resp.get("content", []):
+                            if c.get("type") == "text":
+                                try:
+                                    p_data = json.loads(c.get("text", "{}"))
+                                    res_list = p_data.get("data", {}).get("result", [])
+                                    failing_agents = []
+                                    for item in res_list:
+                                        val = float(item.get("value", [0, 0])[1])
+                                        if val > 0:
+                                            failing_agents.append(item.get("metric", {}).get("agent", "unknown"))
+                                    if failing_agents:
+                                        cascade_had_failures = True
+                                        blocking_reasons.append(
+                                            f"Agent failure(s) detected during cascade '{cascade_id}': {', '.join(failing_agents)}"
+                                        )
+                                except Exception as p_parse_exc:
+                                    query_error = True
+                                    blocking_reasons.append(
+                                        f"Could not verify Grafana telemetry status — invalid JSON response ({p_parse_exc})."
+                                    )
+                except Exception as exc:
+                    print(f"[producer_agent] Warning: telemetry query failed: {exc}")
+                    query_error = True
+                    blocking_reasons.append(
+                        f"Could not verify Grafana telemetry status — readiness cannot be confirmed ({exc})."
+                    )
+
+        if query_error:
+            readiness_status = "unknown"
+            ready = False
+        elif len(blocking_reasons) > 0:
+            readiness_status = "blocked"
+            ready = False
+        else:
+            readiness_status = "ready"
+            ready = True
 
         return {
             "ready": ready,
@@ -231,6 +311,10 @@ INSTRUCTIONS & CONSTRAINTS:
 4. Note that if a risk flag has a recorded mitigation (status [MITIGATED]), it is considered MITIGATED and should NOT be listed as an outstanding unmitigated risk in "outstanding_risks". Only unmitigated risks belong in "outstanding_risks".
 5. Ensure total_budget_impact in the output JSON matches the exact total budget calculated from the budget lines ({total_budget_impact}).
 6. READINESS GATE REQUIREMENTS:
+   - If the Readiness Status is UNKNOWN (ready=False):
+     * "readiness_status" in your output JSON MUST be "unknown".
+     * "blocking_reasons" MUST contain: {json.dumps(readiness['blocking_reasons'])}.
+     * "recommendation" MUST EXPLICITLY STATE that production readiness CANNOT BE CONFIRMED due to unverified observability signals or Grafana connectivity errors, advising caution and requiring manual verification before proceeding. NEVER phrase an "unknown" state as an all-clear.
    - If the Readiness Status is BLOCKED (ready=False):
      * "readiness_status" in your output JSON MUST be "blocked".
      * "blocking_reasons" MUST contain: {json.dumps(readiness['blocking_reasons'])}.
@@ -274,8 +358,12 @@ INSTRUCTIONS & CONSTRAINTS:
     readiness_status = data.get("readiness_status", readiness["readiness_status"])
     blocking_reasons = data.get("blocking_reasons", readiness["blocking_reasons"])
 
-    # Hard enforcement: if readiness gate says blocked, ensure readiness_status is blocked
-    if not readiness["ready"]:
+    # Hard enforcement: ensure returned readiness_status and blocking_reasons match the evaluated gate
+    if readiness["readiness_status"] == "unknown":
+        readiness_status = "unknown"
+        if not blocking_reasons:
+            blocking_reasons = readiness["blocking_reasons"]
+    elif not readiness["ready"]:
         readiness_status = "blocked"
         if not blocking_reasons:
             blocking_reasons = readiness["blocking_reasons"]

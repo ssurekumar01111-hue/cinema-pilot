@@ -37,6 +37,9 @@ _AGENT_FAILURES = None
 _CASCADE_STATUS = None
 _ASSET_DURATION = None
 
+# In-process cascade failure tracking
+_CASCADE_FAILURES: dict[str, int] = {}
+
 
 def _load_credentials() -> tuple[str | None, str, str]:
     """
@@ -141,6 +144,35 @@ def flush_telemetry(timeout_millis: int = 5000) -> None:
             logger.warning("Telemetry flush failed: %s", exc)
 
 
+def record_agent_failure(cascade_id: str, agent_name: str = "unknown", error_type: str = "Exception") -> None:
+    """
+    Explicitly record an agent failure against a cascade correlation ID.
+    Increments the in-process cascade failure tracker and Prometheus counter.
+    """
+    init_telemetry()
+    cascade_str = str(cascade_id or "standalone")
+    _CASCADE_FAILURES[cascade_str] = _CASCADE_FAILURES.get(cascade_str, 0) + 1
+    if _AGENT_FAILURES:
+        _AGENT_FAILURES.add(
+            1,
+            {
+                "agent": agent_name,
+                "cascade_id": cascade_str,
+                "error_type": error_type,
+            },
+        )
+
+
+def get_cascade_failure_count(cascade_id: str) -> int:
+    """Return the total number of agent failures recorded for a cascade ID."""
+    return _CASCADE_FAILURES.get(str(cascade_id), 0)
+
+
+def has_cascade_failures(cascade_id: str) -> bool:
+    """Return True if any agent failures occurred during this cascade run."""
+    return get_cascade_failure_count(cascade_id) > 0
+
+
 def record_cascade_status(cascade_id: str, is_healthy: bool = True) -> None:
     """
     Record cascade status (1=healthy, 0=degraded).
@@ -207,6 +239,7 @@ def instrument_agent(agent_name: str, asset_type: str | None = None) -> Callable
                 return result
             except Exception as exc:
                 elapsed = time.perf_counter() - t0
+                _CASCADE_FAILURES[cascade_str] = _CASCADE_FAILURES.get(cascade_str, 0) + 1
                 if _AGENT_FAILURES:
                     _AGENT_FAILURES.add(
                         1,

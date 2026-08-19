@@ -101,14 +101,20 @@ scripts/
    - Create a free account at [grafana.com/products/cloud](https://grafana.com/products/cloud/)
    - As the stack admin, open the Grafana Assistant once to accept its terms (required before MCP access works)
    - Run the one-time OAuth bootstrap: `python infra/grafana_oauth_bootstrap.py` — this opens your browser once to authorize; the token is cached locally in `~/.cinemapilot/grafana_mcp_token.json` and refreshes automatically for 30 days.
-   - **OpenTelemetry Metrics Export**: Under Grafana Cloud Portal → **Administration** → **Users and access** → **Access Policies** (or **Connections** → **OpenTelemetry**), create an Access Policy with `metrics:write` and `traces:write` scopes, generate a token, and set the environment variables:
+   - **Environment Variables & Overrides**: Configure the following environment variables (sensible defaults are provided if unset):
      ```bash
-     export GRAFANA_CLOUD_OTLP_TOKEN="<your_grafana_cloud_access_policy_token>"
-     export GRAFANA_CLOUD_INSTANCE_ID="<your_grafana_instance_id>" # e.g. 3419920
-     ```
-     *(If unset, telemetry automatically falls back to local console/in-memory logging without interrupting execution).*
+     # Grafana Stack & MCP endpoint
+     export GRAFANA_STACK_URL="https://daringhamster1557.grafana.net" # or your custom Grafana Cloud stack URL
+     export GRAFANA_PROMETHEUS_UID="grafanacloud-prom"               # discovered dynamically if unset
 
-6. **Update project-specific constants** — `PROJECT`/`DATASET`/`BUCKET_NAME` in `shared/graph_client/__init__.py` and `shared/asset_storage/__init__.py`, and your Grafana stack URL in `shared/grafana_client.py`.
+     # OpenTelemetry Metrics Export
+     export GRAFANA_CLOUD_OTLP_TOKEN="<your_grafana_cloud_access_policy_token>"
+     export GRAFANA_CLOUD_INSTANCE_ID="3419920"                      # your Grafana instance ID
+     export GRAFANA_CLOUD_OTLP_ENDPOINT="https://prometheus-prod-43-prod-ap-south-1.grafana.net/otlp/v1/metrics"
+     ```
+     *(If `GRAFANA_CLOUD_OTLP_TOKEN` is unset, telemetry automatically falls back to local console logging without interrupting execution).*
+
+6. **Update project-specific constants** — `PROJECT`/`DATASET`/`BUCKET_NAME` in `shared/graph_client/__init__.py` and `shared/asset_storage/__init__.py`.
 
 ## Running it
 
