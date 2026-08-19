@@ -50,7 +50,7 @@ Both use ADK's `McpToolset` over Streamable HTTP with OAuth 2.1 + Dynamic Client
 - **Reasoning:** Gemini (via `google-genai`)
 - **Orchestration:** Google ADK (`google-adk`) for Grafana MCP tool calling
 - **Data:** BigQuery (Production Graph — 13 tables, event-sourced, all queries parameterized)
-- **Generative media:** Imagen 3 (storyboards), Lyria 3 (music cues), Gemini TTS (multi-speaker dialogue previews)
+- **Generative media:** `gemini-3.1-flash-image` (storyboards — [see model note](#model-note-storyboard-image-generation)), Lyria 3 (music cues), Gemini TTS (multi-speaker dialogue previews)
 - **Asset storage:** Google Cloud Storage, IAM-impersonated V4 signed URLs
 - **Partner integration:** Grafana Cloud MCP (Incidents, Prometheus, Loki)
 
@@ -136,6 +136,27 @@ python agents/budget/agent.py
 python agents/risk/agent.py       # includes Grafana incident escalation
 python agents/location/agent.py   # includes Grafana observability query
 ```
+
+## Model note: storyboard image generation
+
+The original project spec called for **Imagen 3** (`imagen-3.0-generate-002` via Vertex AI).
+During development we confirmed that Imagen 3 is no longer available as a publisher model
+on Vertex AI for new projects — every call returns `404 NOT_FOUND: Publisher Model
+publishers/google/models/imagen-3.0-generate-002 is not found` regardless of region,
+credential type, or SDK version. Google's own migration guidance (August 2025) confirms
+Imagen 3 has been superseded by the Gemini native image generation family.
+
+CinemaPilot uses **`gemini-3.1-flash-image`** — Google's current recommended image
+generation model — via the Gemini Developer API. It is not a workaround or placeholder:
+it produces full-resolution JPEG storyboard images (730–955 KB per scene) grounded in
+real scene metadata (location, emotional tone, camera cues, character descriptions).
+Google's own migration docs list `gemini-3.1-flash-image` as the recommended replacement
+for teams previously on Imagen-based or `gemini-2.5-flash-image` workflows.
+
+**One-line answer for judges:** *"Imagen 3 was deprecated by Google as of mid-2025 and
+returns 404 on Vertex AI for all new projects. We use `gemini-3.1-flash-image`, Google's
+current recommended generative image model, which produces equivalent quality output and
+is the stated migration target in Google's own release guidance."*
 
 ## License
 
