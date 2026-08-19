@@ -18,17 +18,130 @@ from typing import Any
 from google import genai
 from google.genai import types
 
-# Ensure shared package is importable when running directly
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
-
 from shared.graph_client import ProductionGraphClient
+from shared.grafana_client import get_grafana_toolset
 from shared.telemetry import instrument_agent
+
+
+def check_production_readiness(scene_id: str, location_id: str, cascade_id: str | None = None) -> dict[str, Any]:
+    """
+    Evaluate production readiness against real Grafana signals:
+    1. Queries Grafana Cloud Incidents via MCP to check for active unresolved incidents on this location.
+    2. Queries Prometheus telemetry for agent failures in this cascade run.
+
+    Args:
+        scene_id: Scene ID being evaluated.
+        location_id: Location ID being checked.
+        cascade_id: Optional correlation ID for this cascade.
+
+    Returns:
+        Dict with keys: ready (bool), readiness_status ("ready"|"blocked"),
+        blocking_reasons (list[str]), active_incident_url (str|None),
+        active_incident_id (str|None), cascade_had_failures (bool).
+    """
+    import asyncio
+
+    async def _check_async() -> dict[str, Any]:
+        blocking_reasons: list[str] = []
+        active_incident_url: str | None = None
+        active_incident_id: str | None = None
+        cascade_had_failures: bool = False
+
+        toolset = get_grafana_toolset(tool_filter=["list_incidents", "query_prometheus"])
+        tools = {t.name: t for t in await toolset.get_tools()}
+
+        # 1. Check for active unresolved Grafana incidents for this location
+        list_incidents_tool = tools.get("list_incidents")
+        if list_incidents_tool and location_id:
+            try:
+                resp = await list_incidents_tool._run_async_impl(
+                    args={"limit": 50, "status": "active"},
+                    tool_context=None,
+                    credential=None,
+                )
+                for c in resp.get("content", []):
+                    if c.get("type") == "text":
+                        try:
+                            inc_data = json.loads(c.get("text", "{}"))
+                            incidents = inc_data.get("incidents", [])
+                            for inc in incidents:
+                                inc_status = str(inc.get("status", "")).lower()
+                                if inc_status != "active":
+                                    continue
+                                inc_title = str(inc.get("title", ""))
+                                inc_desc = str(inc.get("description", ""))
+                                if location_id in inc_title or location_id in inc_desc:
+                                    inc_id = str(inc.get("incidentId") or inc.get("incidentID") or inc.get("id") or "")
+                                    active_incident_id = inc_id
+                                    active_incident_url = inc.get("url") or inc.get("html_url") or f"https://daringhamster1557.grafana.net/a/grafana-irm-app/incidents/{inc_id}"
+                                    blocking_reasons.append(
+                                        f"Active Grafana incident #{inc_id} for {location_id} has not been resolved: '{inc_title}'"
+                                    )
+                                    break
+                        except json.JSONDecodeError:
+                            pass
+            except Exception as exc:
+                print(f"[producer_agent] Warning: list_incidents check failed: {exc}")
+
+        # 2. Check cascade telemetry failures in Prometheus
+        if cascade_id and tools.get("query_prometheus"):
+            try:
+                prom_tool = tools["query_prometheus"]
+                q_expr = f'cinemapilot_agent_failures_total{{cascade_id="{cascade_id}"}}'
+                p_resp = await prom_tool._run_async_impl(
+                    args={"datasourceUid": "grafanacloud-prom", "expr": q_expr, "endTime": "now", "queryType": "instant"},
+                    tool_context=None,
+                    credential=None,
+                )
+                for c in p_resp.get("content", []):
+                    if c.get("type") == "text":
+                        try:
+                            p_data = json.loads(c.get("text", "{}"))
+                            res_list = p_data.get("data", {}).get("result", [])
+                            failing_agents = []
+                            for item in res_list:
+                                val = float(item.get("value", [0, 0])[1])
+                                if val > 0:
+                                    failing_agents.append(item.get("metric", {}).get("agent", "unknown"))
+                            if failing_agents:
+                                cascade_had_failures = True
+                                blocking_reasons.append(
+                                    f"Agent failure(s) detected during cascade '{cascade_id}': {', '.join(failing_agents)}"
+                                )
+                        except Exception:
+                            pass
+            except Exception as exc:
+                print(f"[producer_agent] Warning: telemetry query failed: {exc}")
+
+        ready = len(blocking_reasons) == 0
+        readiness_status = "ready" if ready else "blocked"
+
+        return {
+            "ready": ready,
+            "readiness_status": readiness_status,
+            "blocking_reasons": blocking_reasons,
+            "active_incident_url": active_incident_url,
+            "active_incident_id": active_incident_id,
+            "cascade_had_failures": cascade_had_failures,
+        }
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import nest_asyncio
+        nest_asyncio.apply()
+        return loop.run_until_complete(_check_async())
+    else:
+        return asyncio.run(_check_async())
 
 
 @instrument_agent("producer_agent")
 def producer_overview(scene_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
-    Generate an executive producer overview for a scene ID using Gemini.
+    Generate an executive producer overview for a scene ID using Gemini with Grafana readiness gating.
 
     Args:
       scene_id: Unique scene identifier (e.g. "scene_005").
@@ -36,13 +149,14 @@ def producer_overview(scene_id: str, cascade_id: str | None = None) -> dict[str,
 
     Steps:
       a. Fetches scene, location, budget_lines, schedule_blocks, and risk_flags.
-      b. Prompts Gemini (gemini-2.5-flash) for JSON synthesis grounded strictly in fetched data.
-      c. Stores result in BigQuery producer_overviews table.
-      d. Logs audit event to Production Graph events table.
+      b. Evaluates live production readiness gate via check_production_readiness().
+      c. Prompts Gemini (gemini-2.5-flash) for JSON synthesis with hard readiness constraints.
+      d. Stores result in BigQuery producer_overviews table.
+      e. Logs audit event to Production Graph events table.
 
     Returns:
       Dict with producer_overview_id, scene_id, overview_summary, total_budget_impact,
-      schedule_status, outstanding_risks, and recommendation.
+      schedule_status, outstanding_risks, recommendation, readiness_status, and blocking_reasons.
     """
     graph_client = ProductionGraphClient()
 
@@ -53,6 +167,10 @@ def producer_overview(scene_id: str, cascade_id: str | None = None) -> dict[str,
 
     location_id = scene.get("location_id")
     location = graph_client.get_location(location_id) if location_id else None
+
+    # b. Evaluate live Grafana readiness gate
+    readiness = check_production_readiness(scene_id, location_id or "", cascade_id)
+    print(f"[producer_agent] Readiness gate: status='{readiness['readiness_status']}', ready={readiness['ready']}, blockers={readiness['blocking_reasons']}")
 
     # Fetch linked budget lines
     budget_lines = graph_client.get_budget_lines_for_entity(scene_id)
@@ -82,7 +200,11 @@ def producer_overview(scene_id: str, cascade_id: str | None = None) -> dict[str,
         )
     risk_str = "\n".join(risk_details) if risk_details else "No risk flags recorded for location."
 
-    # b. Construct prompt for Gemini
+    # b. Construct prompt for Gemini with live Grafana Readiness Gate
+    readiness_str = f"""- Status: {readiness['readiness_status'].upper()} (Ready: {readiness['ready']})
+- Active Incident: {readiness.get('active_incident_url') or 'None'}
+- Blocking Reasons: {readiness['blocking_reasons']}"""
+
     prompt = f"""
 You are an Executive Producer creating a high-level producer overview for a movie production scene.
 
@@ -99,20 +221,33 @@ FETCHED PRODUCTION GRAPH DATA:
 - Location Risk Flags:
 {risk_str}
 
+- Live Production Readiness Gate (Grafana Incidents & Telemetry Observability):
+{readiness_str}
+
 INSTRUCTIONS & CONSTRAINTS:
 1. Base your summary, total_budget_impact, schedule_status, outstanding_risks, and recommendation STRICTLY on the actual fetched data above.
 2. DO NOT invent dollar figures not present in the fetched budget lines.
 3. DO NOT invent risks beyond what is recorded in the risk_flags list.
 4. Note that if a risk flag has a recorded mitigation (status [MITIGATED]), it is considered MITIGATED and should NOT be listed as an outstanding unmitigated risk in "outstanding_risks". Only unmitigated risks belong in "outstanding_risks".
 5. Ensure total_budget_impact in the output JSON matches the exact total budget calculated from the budget lines ({total_budget_impact}).
-6. Keep recommendations grounded in the data (e.g. do not recommend fixing a risk if it has already been mitigated).
+6. READINESS GATE REQUIREMENTS:
+   - If the Readiness Status is BLOCKED (ready=False):
+     * "readiness_status" in your output JSON MUST be "blocked".
+     * "blocking_reasons" MUST contain: {json.dumps(readiness['blocking_reasons'])}.
+     * "recommendation" MUST EXPLICITLY STATE that production is NOT READY to proceed and MUST cite the specific blocker reason(s) (e.g. naming the active Grafana incident or pipeline failures). DO NOT soften this into an "all clear" recommendation despite the blocker.
+   - If the Readiness Status is READY (ready=True):
+     * "readiness_status" in your output JSON MUST be "ready".
+     * "blocking_reasons" MUST be [].
+     * "recommendation" should give clear production go-ahead guidance based on the data.
 7. Return ONLY a valid JSON object matching this schema:
 {{
   "overview_summary": "string",
   "total_budget_impact": {total_budget_impact},
   "schedule_status": "string",
   "outstanding_risks": ["string"],
-  "recommendation": "string"
+  "recommendation": "string",
+  "readiness_status": "{readiness['readiness_status']}",
+  "blocking_reasons": {json.dumps(readiness['blocking_reasons'])}
 }}
 """
 
@@ -136,6 +271,14 @@ INSTRUCTIONS & CONSTRAINTS:
     schedule_status = data.get("schedule_status", "")
     outstanding_risks = data.get("outstanding_risks", [])
     recommendation = data.get("recommendation", "")
+    readiness_status = data.get("readiness_status", readiness["readiness_status"])
+    blocking_reasons = data.get("blocking_reasons", readiness["blocking_reasons"])
+
+    # Hard enforcement: if readiness gate says blocked, ensure readiness_status is blocked
+    if not readiness["ready"]:
+        readiness_status = "blocked"
+        if not blocking_reasons:
+            blocking_reasons = readiness["blocking_reasons"]
 
     # c. Store in BigQuery producer_overviews table
     producer_overview_id = f"po_{scene_id}"
@@ -149,6 +292,8 @@ INSTRUCTIONS & CONSTRAINTS:
         "schedule_status": schedule_status,
         "outstanding_risks": outstanding_risks,
         "recommendation": recommendation,
+        "readiness_status": readiness_status,
+        "blocking_reasons": blocking_reasons,
     }
 
     graph_client.upsert_producer_overview(overview_record)
@@ -187,6 +332,8 @@ INSTRUCTIONS & CONSTRAINTS:
         "schedule_status": schedule_status,
         "outstanding_risks": outstanding_risks,
         "recommendation": recommendation,
+        "readiness_status": readiness_status,
+        "blocking_reasons": blocking_reasons,
     }
 
 

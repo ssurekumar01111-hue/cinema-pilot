@@ -143,6 +143,8 @@ CREATE TABLE IF NOT EXISTS `cinemapilot-2026.production_graph.producer_overviews
   schedule_status STRING,
   outstanding_risks ARRAY<STRING>,
   recommendation STRING,
+  readiness_status STRING,
+  blocking_reasons ARRAY<STRING>,
   version INT64,
   updated_at TIMESTAMP
 );

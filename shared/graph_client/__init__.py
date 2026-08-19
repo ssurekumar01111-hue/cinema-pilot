@@ -1166,14 +1166,16 @@ class ProductionGraphClient:
             schedule_status      = @schedule_status,
             outstanding_risks    = @outstanding_risks,
             recommendation       = @recommendation,
+            readiness_status     = @readiness_status,
+            blocking_reasons     = @blocking_reasons,
             version              = target.version + 1,
             updated_at           = CURRENT_TIMESTAMP()
         WHEN NOT MATCHED THEN INSERT
             (producer_overview_id, scene_id, overview_summary, total_budget_impact,
-             schedule_status, outstanding_risks, recommendation, version, updated_at)
+             schedule_status, outstanding_risks, recommendation, readiness_status, blocking_reasons, version, updated_at)
         VALUES
             (@producer_overview_id, @scene_id, @overview_summary, @total_budget_impact,
-             @schedule_status, @outstanding_risks, @recommendation, 1, CURRENT_TIMESTAMP())
+             @schedule_status, @outstanding_risks, @recommendation, @readiness_status, @blocking_reasons, 1, CURRENT_TIMESTAMP())
         """
         self._run(sql, [
             self._s("producer_overview_id", "STRING",  record.get("producer_overview_id")),
@@ -1183,6 +1185,8 @@ class ProductionGraphClient:
             self._s("schedule_status",      "STRING",  record.get("schedule_status")),
             self._a("outstanding_risks",    "STRING",  record.get("outstanding_risks", [])),
             self._s("recommendation",       "STRING",  record.get("recommendation")),
+            self._s("readiness_status",     "STRING",  record.get("readiness_status", "ready")),
+            self._a("blocking_reasons",     "STRING",  record.get("blocking_reasons", [])),
         ])
 
     def get_producer_overview(self, producer_overview_id: str) -> dict | None:
