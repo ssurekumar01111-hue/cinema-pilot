@@ -193,6 +193,20 @@ def _compute_triggered_agents(entity_type: str, changed_fields: set[str]) -> lis
     return triggered
 
 
+def _describe_routing_decision(
+    entity_type: str,
+    changed_fields: list[str],
+    triggered_agents: list[str],
+) -> str:
+    """Return a deterministic, human-readable explanation of a route."""
+    changed = ", ".join(changed_fields) if changed_fields else "no business fields"
+    if not triggered_agents:
+        return f"{entity_type} changed ({changed}); no downstream agents are affected."
+
+    agents = ", ".join(triggered_agents)
+    return f"{entity_type} changed ({changed}); routed to {agents}."
+
+
 # ---------------------------------------------------------------------------
 # Main detection function
 # ---------------------------------------------------------------------------
@@ -228,6 +242,7 @@ def detect_changes(since_timestamp: datetime, cascade_id: str | None = None) -> 
                 "entity_id":         str,
                 "changed_fields":    list[str],
                 "triggered_agents":  list[str],
+                "reason":            str,
               },
               ...
             ]
@@ -267,6 +282,7 @@ def detect_changes(since_timestamp: datetime, cascade_id: str | None = None) -> 
 
         # Compute which agents to trigger
         triggered = _compute_triggered_agents(entity_type, set(changed_fields))
+        reason = _describe_routing_decision(entity_type, changed_fields, triggered)
 
         print(
             f"  [eval] {event_id[:8]}…  "
@@ -293,6 +309,7 @@ def detect_changes(since_timestamp: datetime, cascade_id: str | None = None) -> 
             "entity_id":         entity_id,
             "changed_fields":    changed_fields,
             "triggered_agents":  triggered,
+            "reason":            reason,
         })
 
     print(f"[change_detection] Done. {len(results)} decision(s) produced.")
@@ -486,4 +503,3 @@ if __name__ == "__main__":
     else:
         print("\n  Loop-prevention FAILED - see output above.")
         sys.exit(1)
-
