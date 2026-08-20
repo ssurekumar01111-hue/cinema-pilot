@@ -235,16 +235,17 @@ function renderSceneDetail(data) {
       </div>
     </div>
   `;
-  if (storyboard && storyboard.signed_url) {
+  const sbMediaUrl = storyboard ? (storyboard.media_url || storyboard.proxy_url || storyboard.signed_url) : null;
+  if (storyboard && sbMediaUrl) {
     storyboardHtml = `
       <div class="cascade-card">
         <div class="cascade-card-header">
           <div class="cascade-card-title">🎨 Storyboard Panel</div>
-          <span class="badge badge-emerald">Generated (Imagen 3)</span>
+          <span class="badge badge-emerald">Generated (gemini-3.1-flash-image)</span>
         </div>
         <div class="storyboard-media-container">
-          <a href="${storyboard.signed_url}" target="_blank" title="Click to view full resolution">
-            <img src="${storyboard.signed_url}" alt="Storyboard for ${escapeHtml(scene.scene_id)}" loading="lazy" />
+          <a href="${sbMediaUrl}" target="_blank" title="Click to view full resolution">
+            <img src="${sbMediaUrl}" alt="Storyboard for ${escapeHtml(scene.scene_id)}" loading="lazy" />
           </a>
         </div>
         ${storyboard.prompt_used ? `
@@ -268,7 +269,8 @@ function renderSceneDetail(data) {
       </div>
     </div>
   `;
-  if (music_cue && music_cue.signed_url) {
+  const mcMediaUrl = music_cue ? (music_cue.media_url || music_cue.proxy_url || music_cue.signed_url) : null;
+  if (music_cue && mcMediaUrl) {
     musicHtml = `
       <div class="cascade-card">
         <div class="cascade-card-header">
@@ -277,7 +279,7 @@ function renderSceneDetail(data) {
         </div>
         <div class="music-player-container">
           <audio controls preload="metadata">
-            <source src="${music_cue.signed_url}" type="audio/mpeg">
+            <source src="${mcMediaUrl}" type="audio/mpeg">
             Your browser does not support the audio player.
           </audio>
           ${music_cue.description ? `

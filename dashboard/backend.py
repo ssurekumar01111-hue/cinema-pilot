@@ -8,14 +8,16 @@ and cascade audit events. Serves the static frontend.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import datetime
 import os
+import re
 import sys
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 # Ensure cinemapilot root is on sys.path
@@ -41,6 +43,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+ALLOWED_MEDIA_TYPES = {"storyboard", "music"}
 
 # Lazy singletons for clients
 _graph_client: Optional[ProductionGraphClient] = None
@@ -72,15 +76,61 @@ def sanitize_value(val: Any) -> Any:
     return val
 
 
+@app.get("/api/media/{asset_type}/{scene_id}/{filename}")
+def get_media_asset(asset_type: str, scene_id: str, filename: str):
+    """
+    Direct media proxy for dashboard assets (storyboard images, music audio) stored in GCS.
+    Downloads object bytes directly via storage.objectViewer IAM permissions without requiring signed URLs.
+
+    Args:
+        asset_type: Must be 'storyboard' or 'music'.
+        scene_id:   ID of scene (e.g. 'scene_005').
+        filename:   File name (e.g. 'abc.png' or 'xyz.mp3').
+    """
+    if asset_type not in ALLOWED_MEDIA_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid asset_type '{asset_type}'. Allowed types: {sorted(ALLOWED_MEDIA_TYPES)}"
+        )
+
+    # Path traversal validation
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", scene_id):
+        raise HTTPException(status_code=400, detail="Invalid scene_id format.")
+    if not re.match(r"^[a-zA-Z0-9_\-\.]+$", filename) or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename format.")
+
+    sc = get_storage_client()
+    try:
+        data, content_type = sc.download_asset_bytes(asset_type, scene_id, filename)
+        return Response(
+            content=data,
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "Content-Disposition": f'inline; filename="{filename}"',
+            }
+        )
+    except AssetStorageError as exc:
+        raise HTTPException(status_code=404, detail=f"Asset not found: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch asset: {exc}") from exc
+
+
 @app.get("/api/scenes")
 def get_scenes() -> list[dict[str, Any]]:
     """
     Return all scenes ordered by timeline position, with joined location names.
+    Queries scenes and locations concurrently from BigQuery for faster response.
     """
     gc = get_graph_client()
     try:
-        scenes = gc.list_scenes()
-        locations = {loc["location_id"]: loc for loc in gc.list_locations()}
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            fut_scenes = executor.submit(gc.list_scenes)
+            fut_locations = executor.submit(gc.list_locations)
+            scenes = fut_scenes.result()
+            locations_list = fut_locations.result()
+
+        locations = {loc["location_id"]: loc for loc in locations_list}
 
         results = []
         for s in scenes:
@@ -107,14 +157,13 @@ def get_scene_detail(scene_id: str) -> dict[str, Any]:
     - budget_lines
     - schedule_blocks
     - risk_flags (with grafana_incident_url)
-    - storyboard (with signed URL via asset_storage)
-    - music_cue (with signed URL via asset_storage)
+    - storyboard (with media proxy URL via /api/media/...)
+    - music_cue (with media proxy URL via /api/media/...)
     - director_note
     - producer_overview
     - explanation
     """
     gc = get_graph_client()
-    sc = get_storage_client()
 
     try:
         scene = gc.get_scene(scene_id)
@@ -122,31 +171,38 @@ def get_scene_detail(scene_id: str) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail=f"Scene '{scene_id}' not found.")
 
         location_id = scene.get("location_id")
-        location = gc.get_location(location_id) if location_id else None
+        character_ids = scene.get("character_ids") or []
+        prop_ids = scene.get("prop_ids") or []
 
-        # Characters
-        characters = []
-        for cid in scene.get("character_ids") or []:
-            c = gc.get_character(cid)
-            if c:
-                characters.append(c)
+        # Execute entity queries in parallel for high responsiveness
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            fut_loc = executor.submit(gc.get_location, location_id) if location_id else None
+            fut_chars = [executor.submit(gc.get_character, cid) for cid in character_ids]
+            fut_props = [executor.submit(gc.get_prop, pid) for pid in prop_ids]
+            fut_budget = executor.submit(gc.get_budget_lines_for_entity, scene_id)
+            fut_schedule = executor.submit(gc.get_schedule_blocks_for_scene, scene_id)
+            fut_scene_risks = executor.submit(gc.get_risk_flags_for_entity, scene_id)
+            fut_loc_risks = executor.submit(gc.get_risk_flags_for_entity, location_id) if location_id else None
+            fut_storyboard = executor.submit(gc.get_storyboard, f"sb_{scene_id}")
+            fut_music = executor.submit(gc.get_music_cue, f"mc_{scene_id}")
+            fut_director = executor.submit(gc.get_director_note, f"dn_{scene_id}")
+            fut_producer = executor.submit(gc.get_producer_overview, f"po_{scene_id}")
+            fut_explanation = executor.submit(gc.get_explanation, f"exp_{scene_id}")
 
-        # Props
-        props = []
-        for pid in scene.get("prop_ids") or []:
-            p = gc.get_prop(pid)
-            if p:
-                props.append(p)
+            location = fut_loc.result() if fut_loc else None
+            characters = [f.result() for f in fut_chars if f.result()]
+            props = [f.result() for f in fut_props if f.result()]
+            budget_lines = fut_budget.result() or []
+            schedule_blocks = fut_schedule.result() or []
+            scene_risks = fut_scene_risks.result() or []
+            loc_risks = (fut_loc_risks.result() if fut_loc_risks else []) or []
+            storyboard = fut_storyboard.result()
+            music_cue = fut_music.result()
+            director_note = fut_director.result()
+            producer_overview = fut_producer.result()
+            explanation = fut_explanation.result()
 
-        # Budget lines
-        budget_lines = gc.get_budget_lines_for_entity(scene_id)
-
-        # Schedule blocks
-        schedule_blocks = gc.get_schedule_blocks_for_scene(scene_id)
-
-        # Risk flags (check both scene_id and location_id, deduplicate)
-        scene_risks = gc.get_risk_flags_for_entity(scene_id)
-        loc_risks = gc.get_risk_flags_for_entity(location_id) if location_id else []
+        # Risk flags deduplication
         seen_risk_ids = set()
         risk_flags = []
         for rf in scene_risks + loc_risks:
@@ -155,36 +211,27 @@ def get_scene_detail(scene_id: str) -> dict[str, Any]:
                 seen_risk_ids.add(rf_id)
                 risk_flags.append(rf)
 
-        # Storyboard + signed URL
-        storyboard = gc.get_storyboard(f"sb_{scene_id}")
+        # Storyboard + media proxy URL
         if storyboard:
             storyboard = dict(storyboard)
             gs_uri = storyboard.get("gs_uri")
             if gs_uri and gs_uri.startswith("gs://"):
-                try:
-                    storyboard["signed_url"] = sc.get_signed_url(gs_uri, expiration_minutes=120)
-                except Exception as exc:
-                    storyboard["signed_url_error"] = str(exc)
+                filename = gs_uri.split("/")[-1]
+                proxy_path = f"/api/media/storyboard/{scene_id}/{filename}"
+                storyboard["media_url"] = proxy_path
+                storyboard["proxy_url"] = proxy_path
+                storyboard["signed_url"] = proxy_path
 
-        # Music cue + signed URL
-        music_cue = gc.get_music_cue(f"mc_{scene_id}")
+        # Music cue + media proxy URL
         if music_cue:
             music_cue = dict(music_cue)
             gs_uri = music_cue.get("gs_uri")
             if gs_uri and gs_uri.startswith("gs://"):
-                try:
-                    music_cue["signed_url"] = sc.get_signed_url(gs_uri, expiration_minutes=120)
-                except Exception as exc:
-                    music_cue["signed_url_error"] = str(exc)
-
-        # Director note
-        director_note = gc.get_director_note(f"dn_{scene_id}")
-
-        # Producer overview
-        producer_overview = gc.get_producer_overview(f"po_{scene_id}")
-
-        # Explanation
-        explanation = gc.get_explanation(f"exp_{scene_id}")
+                filename = gs_uri.split("/")[-1]
+                proxy_path = f"/api/media/music/{scene_id}/{filename}"
+                music_cue["media_url"] = proxy_path
+                music_cue["proxy_url"] = proxy_path
+                music_cue["signed_url"] = proxy_path
 
         detail = {
             "scene": scene,

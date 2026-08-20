@@ -95,6 +95,48 @@ class AssetStorageClient:
         except Exception as exc:
             raise AssetStorageError(f"Unexpected error during asset upload: {exc}") from exc
 
+    def download_asset_bytes(self, entity_type: str, entity_id: str, filename: str) -> tuple[bytes, str]:
+        """
+        Download binary asset bytes directly from GCS via storage.objectViewer.
+
+        Args:
+            entity_type: Validated asset category ('storyboard' | 'music').
+            entity_id:   ID of entity (e.g. 'scene_005').
+            filename:    File name (e.g. 'abc.png' or 'xyz.mp3').
+
+        Returns:
+            Tuple of (raw_bytes, content_type_str).
+
+        Raises:
+            AssetStorageError: If download fails or object is not found.
+        """
+        blob_path = f"{entity_type}/{entity_id}/{filename}"
+        try:
+            bucket = self._gcs.bucket(self.BUCKET_NAME)
+            blob = bucket.blob(blob_path)
+            if not blob.exists():
+                raise AssetStorageError(f"Asset '{blob_path}' not found in bucket '{self.BUCKET_NAME}'.")
+            data = blob.download_as_bytes()
+            content_type = blob.content_type
+            if not content_type:
+                if filename.endswith(".png"):
+                    content_type = "image/png"
+                elif filename.endswith(".jpg") or filename.endswith(".jpeg"):
+                    content_type = "image/jpeg"
+                elif filename.endswith(".mp3"):
+                    content_type = "audio/mpeg"
+                elif filename.endswith(".wav"):
+                    content_type = "audio/wav"
+                else:
+                    content_type = "application/octet-stream"
+            return data, content_type
+        except AssetStorageError:
+            raise
+        except GoogleAPIError as exc:
+            raise AssetStorageError(f"Cloud Storage download failed: {exc}") from exc
+        except Exception as exc:
+            raise AssetStorageError(f"Unexpected error downloading asset: {exc}") from exc
+
     SERVICE_ACCOUNT_EMAIL: str = "cinemapilot-agent@cinemapilot-2026.iam.gserviceaccount.com"
 
     def get_signed_url(self, gs_uri: str, expiration_minutes: int = 60) -> str:
