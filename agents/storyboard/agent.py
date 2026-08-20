@@ -15,6 +15,10 @@ import os
 import sys
 from typing import Any
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from google import genai
 from google.genai import types as genai_types
 
@@ -23,15 +27,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from shared.asset_storage import AssetStorageClient
 from shared.graph_client import ProductionGraphClient
+from shared.secret_client import get_secret
 from shared.telemetry import instrument_agent
 
 # Gemini image generation model — produces ~850 KB real JPEG images
 _IMAGE_MODEL = "models/gemini-3.1-flash-image"
 
 
-def construct_imagen_prompt(scene: dict, location: dict | None, characters: list[dict]) -> str:
+def construct_storyboard_prompt(scene: dict, location: dict | None, characters: list[dict]) -> str:
     """
-    Construct an Imagen 3 prompt grounded strictly in real scene data.
+    Construct a storyboard image prompt grounded strictly in real scene data.
 
     Focuses strictly on visual composition (framing, lighting mood matching emotional_tone, setting)
     and character descriptions. Does not invent plot details or dialogue not present in the data.
@@ -75,10 +80,14 @@ def construct_imagen_prompt(scene: dict, location: dict | None, characters: list
     return " ".join(prompt_parts)
 
 
+# Backward-compatibility alias
+construct_imagen_prompt = construct_storyboard_prompt
+
+
 @instrument_agent("storyboard_agent", asset_type="image")
 def generate_storyboard(scene_id: str, cascade_id: str | None = None) -> dict[str, Any]:
     """
-    Generate a storyboard image panel for a given scene ID using Imagen 3.
+    Generate a storyboard image panel for a given scene ID using gemini-3.1-flash-image.
 
     Args:
       scene_id: Unique scene identifier (e.g. "scene_005").
@@ -86,8 +95,8 @@ def generate_storyboard(scene_id: str, cascade_id: str | None = None) -> dict[st
 
     Steps:
       a. Fetches scene, location, and characters from BigQuery Production Graph.
-      b. Constructs grounded Imagen 3 prompt.
-      c. Calls Imagen 3 via Vertex AI SDK to generate panel image.
+      b. Constructs grounded storyboard image prompt.
+      c. Calls gemini-3.1-flash-image via Gemini Developer API to generate panel image.
       d. Uploads image bytes to Cloud Storage via AssetStorageClient.
       e. Upserts storyboard record in BigQuery storyboards table.
       f. Logs state change event to Production Graph audit log.
@@ -114,13 +123,13 @@ def generate_storyboard(scene_id: str, cascade_id: str | None = None) -> dict[st
             characters.append(char)
 
     # b. Construct grounded prompt
-    prompt = construct_imagen_prompt(scene, location, characters)
+    prompt = construct_storyboard_prompt(scene, location, characters)
 
     # c. Generate storyboard image via Gemini native image generation
-    gemini_api_key = os.environ.get("GEMINI_API_KEY")
+    gemini_api_key = get_secret("GEMINI_API_KEY")
     if not gemini_api_key:
         raise RuntimeError(
-            "GEMINI_API_KEY environment variable is not set. "
+            "GEMINI_API_KEY is not set in environment or GCP Secret Manager. "
             "Set it to your Gemini Developer API key to enable storyboard image generation."
         )
     image_client = genai.Client(api_key=gemini_api_key)
