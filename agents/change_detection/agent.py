@@ -44,7 +44,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from shared.graph_client import ProductionGraphClient, GraphClientError
-from shared.telemetry import instrument_agent
+from shared.telemetry import instrument_agent, record_affected_agents_count
 
 # ---------------------------------------------------------------------------
 # Trigger rule table
@@ -278,6 +278,7 @@ def detect_changes(since_timestamp: datetime, cascade_id: str | None = None) -> 
 
         # Log routing decision in audit trail (only if there's something to trigger)
         if triggered:
+            record_affected_agents_count(cascade_id or "standalone", len(triggered))
             graph.log_event(
                 actor_agent=_ACTOR,
                 entity_type=entity_type,

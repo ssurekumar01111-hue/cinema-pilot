@@ -36,6 +36,10 @@ _AGENT_DURATION = None
 _AGENT_FAILURES = None
 _CASCADE_STATUS = None
 _ASSET_DURATION = None
+_BUDGET_DELTA = None
+_SCHEDULE_SHIFT = None
+_UNMITIGATED_RISKS = None
+_AFFECTED_AGENTS = None
 
 # In-process cascade failure tracking
 _CASCADE_FAILURES: dict[str, int] = {}
@@ -43,14 +47,25 @@ _CASCADE_FAILURES: dict[str, int] = {}
 
 def _load_credentials() -> tuple[str | None, str, str]:
     """
-    Load Grafana Cloud OTLP credentials from environment variables or secure local config.
+    Load Grafana Cloud OTLP credentials:
+    1. Environment variables
+    2. GCP Secret Manager (GRAFANA_CLOUD_OTLP_TOKEN)
+    3. Local config ~/.cinemapilot/telemetry_config.json
     Never exposes or logs token values.
     """
     token = os.environ.get("GRAFANA_CLOUD_OTLP_TOKEN")
     instance_id = os.environ.get("GRAFANA_CLOUD_INSTANCE_ID")
     endpoint = os.environ.get("GRAFANA_CLOUD_OTLP_ENDPOINT")
 
-    # Fallback to local config file if not set in environment
+    # If token not in environment, try Secret Manager
+    if not token:
+        try:
+            from shared.secret_client import get_secret
+            token = get_secret("GRAFANA_CLOUD_OTLP_TOKEN")
+        except Exception as exc:
+            logger.debug("Failed to fetch GRAFANA_CLOUD_OTLP_TOKEN from secret client: %s", exc)
+
+    # Fallback to local config file if not set in environment or Secret Manager
     if not token or not instance_id:
         cfg_path = Path.home() / ".cinemapilot" / "telemetry_config.json"
         if cfg_path.exists():
@@ -76,6 +91,7 @@ def init_telemetry() -> metrics.Meter:
     Initialize OpenTelemetry MeterProvider and register custom metric instruments.
     """
     global _METER_PROVIDER, _METER, _AGENT_DURATION, _AGENT_FAILURES, _CASCADE_STATUS, _ASSET_DURATION
+    global _BUDGET_DELTA, _SCHEDULE_SHIFT, _UNMITIGATED_RISKS, _AFFECTED_AGENTS
 
     if _METER is not None:
         return _METER
@@ -129,6 +145,34 @@ def init_telemetry() -> metrics.Meter:
         unit="s",
     )
 
+    # 5. Cascade budget delta in dollars (gauge)
+    _BUDGET_DELTA = _METER.create_gauge(
+        name="cinemapilot_cascade_budget_delta_dollars",
+        description="Budget cost delta in dollars for a cascade run",
+        unit="USD",
+    )
+
+    # 6. Cascade schedule shift in days (gauge)
+    _SCHEDULE_SHIFT = _METER.create_gauge(
+        name="cinemapilot_cascade_schedule_shift_days",
+        description="Schedule shift in days for a cascade run",
+        unit="d",
+    )
+
+    # 7. Cascade unmitigated risks count (gauge)
+    _UNMITIGATED_RISKS = _METER.create_gauge(
+        name="cinemapilot_cascade_unmitigated_risks_count",
+        description="Count of unmitigated risks identified during cascade",
+        unit="1",
+    )
+
+    # 8. Cascade affected agents count (gauge)
+    _AFFECTED_AGENTS = _METER.create_gauge(
+        name="cinemapilot_cascade_affected_agents_count",
+        description="Count of downstream agents triggered by change detection in cascade",
+        unit="1",
+    )
+
     return _METER
 
 
@@ -144,11 +188,32 @@ def flush_telemetry(timeout_millis: int = 5000) -> None:
             logger.warning("Telemetry flush failed: %s", exc)
 
 
+VALID_PRODUCTION_AGENTS = frozenset({
+    "script_intelligence_agent",
+    "change_detection_agent",
+    "budget_agent",
+    "location_agent",
+    "risk_agent",
+    "schedule_agent",
+    "storyboard_agent",
+    "music_agent",
+    "director_agent",
+    "casting_agent",
+    "voice_agent",
+    "producer_agent",
+    "explanation_agent",
+})
+
+
 def record_agent_failure(cascade_id: str, agent_name: str = "unknown", error_type: str = "Exception") -> None:
     """
     Explicitly record an agent failure against a cascade correlation ID.
     Increments the in-process cascade failure tracker and Prometheus counter.
     """
+    if agent_name.startswith("mock_") or agent_name.startswith("test_"):
+        # Suppress mock/synthetic test failure series from polluting production telemetry
+        return
+
     init_telemetry()
     cascade_str = str(cascade_id or "standalone")
     _CASCADE_FAILURES[cascade_str] = _CASCADE_FAILURES.get(cascade_str, 0) + 1
@@ -183,6 +248,66 @@ def record_cascade_status(cascade_id: str, is_healthy: bool = True) -> None:
         _CASCADE_STATUS.set(val, {"cascade_id": str(cascade_id)})
 
 
+def record_budget_delta(cascade_id: str, scene_id: str, delta_dollars: float, category: str = "location") -> None:
+    """
+    Record budget delta in dollars for a cascade run.
+    """
+    init_telemetry()
+    if _BUDGET_DELTA:
+        _BUDGET_DELTA.set(
+            float(delta_dollars),
+            {
+                "cascade_id": str(cascade_id or "standalone"),
+                "scene_id": str(scene_id or "global"),
+                "category": str(category or "general"),
+            },
+        )
+
+
+def record_schedule_shift(cascade_id: str, scene_id: str, shift_days: int | float) -> None:
+    """
+    Record schedule shift in days for a cascade run.
+    """
+    init_telemetry()
+    if _SCHEDULE_SHIFT:
+        _SCHEDULE_SHIFT.set(
+            float(shift_days),
+            {
+                "cascade_id": str(cascade_id or "standalone"),
+                "scene_id": str(scene_id or "global"),
+            },
+        )
+
+
+def record_unmitigated_risks_count(cascade_id: str, count: int, severity: str = "high") -> None:
+    """
+    Record count of unmitigated risks identified during cascade.
+    """
+    init_telemetry()
+    if _UNMITIGATED_RISKS:
+        _UNMITIGATED_RISKS.set(
+            float(count),
+            {
+                "cascade_id": str(cascade_id or "standalone"),
+                "severity": str(severity or "high"),
+            },
+        )
+
+
+def record_affected_agents_count(cascade_id: str, count: int) -> None:
+    """
+    Record count of downstream agents triggered by change detection in cascade.
+    """
+    init_telemetry()
+    if _AFFECTED_AGENTS:
+        _AFFECTED_AGENTS.set(
+            float(count),
+            {
+                "cascade_id": str(cascade_id or "standalone"),
+            },
+        )
+
+
 def instrument_agent(agent_name: str, asset_type: str | None = None) -> Callable:
     """
     Decorator to instrument CinemaPilot agents with execution timing, failure metrics,
@@ -195,7 +320,9 @@ def instrument_agent(agent_name: str, asset_type: str | None = None) -> Callable
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            init_telemetry()
+            is_mock_or_test = agent_name.startswith("mock_") or agent_name.startswith("test_")
+            if not is_mock_or_test:
+                init_telemetry()
 
             # Extract scene_id and cascade_id if present
             scene_id = kwargs.get("scene_id")
@@ -215,7 +342,7 @@ def instrument_agent(agent_name: str, asset_type: str | None = None) -> Callable
                 elapsed = time.perf_counter() - t0
 
                 # Record duration
-                if _AGENT_DURATION:
+                if not is_mock_or_test and _AGENT_DURATION:
                     _AGENT_DURATION.record(
                         elapsed,
                         {
@@ -226,7 +353,7 @@ def instrument_agent(agent_name: str, asset_type: str | None = None) -> Callable
                     )
 
                 # Record asset generation duration if applicable
-                if asset_type and _ASSET_DURATION:
+                if not is_mock_or_test and asset_type and _ASSET_DURATION:
                     _ASSET_DURATION.record(
                         elapsed,
                         {
@@ -240,7 +367,7 @@ def instrument_agent(agent_name: str, asset_type: str | None = None) -> Callable
             except Exception as exc:
                 elapsed = time.perf_counter() - t0
                 _CASCADE_FAILURES[cascade_str] = _CASCADE_FAILURES.get(cascade_str, 0) + 1
-                if _AGENT_FAILURES:
+                if not is_mock_or_test and _AGENT_FAILURES:
                     _AGENT_FAILURES.add(
                         1,
                         {

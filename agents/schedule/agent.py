@@ -36,7 +36,7 @@ from google import genai
 from google.genai import types
 
 from shared.graph_client import ProductionGraphClient, GraphClientError
-from shared.telemetry import instrument_agent
+from shared.telemetry import instrument_agent, record_schedule_shift
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -230,6 +230,10 @@ def reschedule_shoot(scene_id: str, cascade_id: str | None = None) -> dict[str, 
     }
 
     graph.upsert_schedule_block(schedule_block_record)
+
+    prev_day = previous_block.get("day_index") if previous_block else day_index
+    shift_days = day_index - (prev_day or day_index)
+    record_schedule_shift(cascade_id or "standalone", scene_id, shift_days)
 
     before_state = {
         "day_index": previous_block.get("day_index") if previous_block else None,
