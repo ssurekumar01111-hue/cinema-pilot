@@ -163,7 +163,8 @@ def check_production_readiness(scene_id: str, location_id: str, cascade_id: str 
                             if c.get("type") == "text":
                                 try:
                                     p_data = json.loads(c.get("text", "{}"))
-                                    res_list = p_data.get("data", {}).get("result", [])
+                                    raw_data = p_data.get("data")
+                                    res_list = raw_data if isinstance(raw_data, list) else p_data.get("data", {}).get("result", [])
                                     failing_agents = []
                                     for item in res_list:
                                         val = float(item.get("value", [0, 0])[1])
