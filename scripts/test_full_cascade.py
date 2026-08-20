@@ -24,6 +24,12 @@ import uuid
 # Ensure cinemapilot directory is in path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.abspath(os.path.join(os.path.dirname(__file__), "../.env")))
+except ImportError:
+    pass
+
 from shared.graph_client import ProductionGraphClient
 from shared.telemetry import (
     record_cascade_status,
@@ -87,6 +93,27 @@ def main():
         rf_beach["grafana_incident_url"] = None
         graph_client.upsert_risk_flag(rf_beach)
         print("Reset rf_loc_loc_sunset_beach mitigation -> '' and grafana_incident_url -> None")
+
+    # Reset baseline budget line for scene_005 to Millbrook storage unit baseline ($850.00)
+    graph_client.upsert_budget_line({
+        "budget_line_id": "bl_location_scene_005",
+        "category": "location",
+        "amount": 850.0,
+        "linked_entity_id": "scene_005",
+        "last_changed_by_agent": "baseline_reset",
+        "reason": "Baseline location fee for Millbrook Storage Unit.",
+    })
+    print("Reset bl_location_scene_005 amount -> $850.00 (Millbrook baseline)")
+
+    # Reset baseline schedule block for scene_005 to baseline Day 3
+    graph_client.upsert_schedule_block({
+        "schedule_block_id": "sb_scene_005",
+        "scene_id": "scene_005",
+        "day_index": 3,
+        "duration_minutes": 180,
+        "constraints": ["Standard interior lighting", "No weather constraints"],
+    })
+    print("Reset sb_scene_005 day_index -> Day 3 (Millbrook baseline)")
 
     # Brief pause to ensure timestamp spacing in BigQuery
     time.sleep(2)

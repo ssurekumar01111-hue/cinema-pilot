@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
+scripts/screenshots/
+scripts/audio_cues/
+
