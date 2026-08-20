@@ -19,6 +19,7 @@ Usage (standalone demo):
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import sys
@@ -36,7 +37,7 @@ from google import genai
 from google.genai import types
 
 from shared.graph_client import ProductionGraphClient, GraphClientError
-from shared.telemetry import instrument_agent
+from shared.telemetry import instrument_agent, record_unmitigated_risks_count
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -130,6 +131,9 @@ def mitigate_risks(location_id: str, cascade_id: str | None = None) -> list[dict
 
     # 2. Fetch unmitigated risk flags for this location using method on graph_client
     unmitigated_flags = graph.get_unmitigated_risk_flags_for_entity(location_id)
+    high_count = sum(1 for f in unmitigated_flags if str(f.get("severity", "")).lower() == "high")
+    record_unmitigated_risks_count(cascade_id or "standalone", count=len(unmitigated_flags), severity="high" if high_count > 0 else "medium")
+
     if not unmitigated_flags:
         print(f"[risk_agent] No unmitigated risk flags found for location '{location_id}'.")
         return []
@@ -221,7 +225,10 @@ def mitigate_risks(location_id: str, cascade_id: str | None = None) -> list[dict
     return updated_records
 
 
-from shared.grafana_client import get_grafana_toolset as _shared_get_grafana_toolset
+from shared.grafana_client import (
+    get_grafana_toolset as _shared_get_grafana_toolset,
+    get_grafana_stack_url,
+)
 
 def get_grafana_toolset() -> McpToolset:
     return _shared_get_grafana_toolset(
@@ -264,11 +271,23 @@ async def escalate_risk_to_grafana(risk_flag_id: str) -> dict:
     add_activity_tool = tools_by_name.get("add_activity_to_incident")
     get_incident_tool = tools_by_name.get("get_incident")
 
-    # c. Check if incident already exists referencing risk_flag_id
+    linked_entity_id = risk_flag.get("linked_entity_id", "unknown")
+    description_text = risk_flag.get("description", "")
+
+    title = f"CinemaPilot Risk: {linked_entity_id} — {severity.upper()}"
+    full_description = (
+        f"Risk Flag ID: {risk_flag_id}\n"
+        f"Linked Entity: {linked_entity_id}\n"
+        f"Severity: {severity.upper()}\n\n"
+        f"Risk Description:\n{description_text}\n\n"
+        f"Mitigation Strategy:\n{mitigation}"
+    )
+
+    # c. Check if an active incident already exists for this entity or risk_flag_id
     if list_incidents_tool:
         try:
             incidents_response = await list_incidents_tool._run_async_impl(
-                args={"limit": 20},
+                args={"limit": 50, "status": "active"},
                 tool_context=None,
                 credential=None,
             )
@@ -280,38 +299,54 @@ async def escalate_risk_to_grafana(risk_flag_id: str) -> dict:
                         inc_data = json.loads(c.get("text", "{}"))
                         incidents = inc_data.get("incidents", [])
                         for inc in incidents:
+                            inc_status = str(inc.get("status", "")).lower()
+                            if inc_status != "active":
+                                continue
                             inc_title = str(inc.get("title", ""))
                             inc_desc = str(inc.get("description", ""))
-                            if risk_flag_id in inc_title or risk_flag_id in inc_desc:
-                                inc_url = inc.get("url") or inc.get("html_url") or json.dumps(inc)
-                                print(f"[risk_agent] Existing Grafana incident found for {risk_flag_id}: {inc_url}")
+                            inc_id = str(inc.get("incidentId") or inc.get("incidentID") or inc.get("id") or "")
+                            
+                            # Match if the active incident is for this risk_flag_id or linked_entity_id
+                            if (risk_flag_id in inc_title or risk_flag_id in inc_desc or
+                                (linked_entity_id and linked_entity_id in inc_title) or
+                                (linked_entity_id and linked_entity_id in inc_desc)):
+                                inc_url = inc.get("url") or inc.get("html_url") or (
+                                    f"{get_grafana_stack_url()}/a/grafana-irm-app/incidents/{inc_id}"
+                                    if inc_id else json.dumps(inc)
+                                )
+                                print(f"[risk_agent] Existing active Grafana incident #{inc_id} found for {risk_flag_id} ({linked_entity_id}): {inc_url}")
+                                
+                                # Add context update note to existing incident timeline if tool is available
+                                if inc_id and add_activity_tool:
+                                    try:
+                                        print(f"[risk_agent] Adding mitigation update note to active Grafana incident #{inc_id} timeline...")
+                                        await add_activity_tool._run_async_impl(
+                                            args={
+                                                "incidentId": str(inc_id),
+                                                "body": f"CinemaPilot Risk Agent updated mitigation for {risk_flag_id}:\n{mitigation}",
+                                            },
+                                            tool_context=None,
+                                            credential=None,
+                                        )
+                                    except Exception as act_exc:
+                                        print(f"[risk_agent] Note: add_activity to incident #{inc_id} returned: {act_exc}")
+
                                 updated_record = dict(risk_flag)
                                 updated_record["grafana_incident_url"] = inc_url
                                 graph.upsert_risk_flag(updated_record)
-                                return {"status": "already_exists", "grafana_incident_url": inc_url, "incident": inc}
+                                return {"status": "already_exists", "grafana_incident_url": inc_url, "incident": inc, "incident_id": inc_id}
                     except json.JSONDecodeError:
                         pass
         except Exception as exc:
             print(f"[risk_agent] Warning: list_incidents check failed ({exc}). Proceeding to create check.")
 
-    # Check if we already stored a URL locally
+    # Check if we already stored an active URL locally
     existing_url = risk_flag.get("grafana_incident_url")
     if existing_url:
         print(f"[risk_agent] Existing incident URL recorded in graph: {existing_url}")
         return {"status": "already_exists", "grafana_incident_url": existing_url}
 
     # d. Create new Grafana incident with full context
-    linked_entity_id = risk_flag.get("linked_entity_id", "unknown")
-    description_text = risk_flag.get("description", "")
-    
-    title = f"CinemaPilot Risk: {linked_entity_id} — {severity.upper()}"
-    full_description = (
-        f"Risk Flag ID: {risk_flag_id}\n"
-        f"Linked Entity: {linked_entity_id}\n"
-        f"Severity: {severity.upper()}\n\n"
-        f"Risk Description:\n{description_text}\n\n"
-        f"Mitigation Strategy:\n{mitigation}"
-    )
 
     if not create_incident_tool:
         raise RuntimeError("Grafana MCP tool 'create_incident' is not available.")
