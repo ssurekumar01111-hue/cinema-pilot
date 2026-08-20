@@ -121,7 +121,7 @@ STRICT CONSTRAINTS & INSTRUCTIONS:
 1. Synthesize a single, clear, producer-facing narrative explaining what changed and why for Scene '{scene_id}'.
 2. Ground EVERY single statement, figure, and claim STRICTLY in the source reasoning texts provided above.
 3. DO NOT introduce any new facts, numbers, figures, risks, or assumptions not explicitly stated in the source text.
-   - For example: if citing base cost, use exact base cost ($3,500.00). If citing final estimated budget impact, use exact figure ($4,500.00).
+   - For example: if citing baseline cost ($850.00), relocated total ($4,500.00), or net budget delta (+$3,650.00), use the exact figures from the source notes.
    - Trace costs, permits, weather/tide constraints, power generation, pacing, and risk mitigations back to the source agent notes.
 4. List in "sources_used" the exact list of agent names whose notes were incorporated in your narrative (options: "location_agent", "budget_agent", "schedule_agent", "risk_agent", "director_agent", "producer_agent").
 5. Return ONLY a valid JSON object matching this schema:

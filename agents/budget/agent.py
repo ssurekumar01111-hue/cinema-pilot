@@ -35,7 +35,7 @@ from google import genai
 from google.genai import types
 
 from shared.graph_client import ProductionGraphClient, GraphClientError
-from shared.telemetry import instrument_agent
+from shared.telemetry import instrument_agent, record_budget_delta
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -165,7 +165,7 @@ def recalculate_budget(scene_id: str, cascade_id: str | None = None) -> dict[str
             model=GEMINI_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
-                temperature=0.1,
+                temperature=0.0,
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
                 response_mime_type="application/json",
             ),
@@ -202,6 +202,10 @@ def recalculate_budget(scene_id: str, cascade_id: str | None = None) -> dict[str
 
     # 4. Upsert Budget Line
     graph.upsert_budget_line(budget_record)
+
+    previous_amount = float(previous_line.get("amount") or 0.0) if previous_line else 0.0
+    cost_delta = estimated_cost - previous_amount
+    record_budget_delta(cascade_id or "standalone", scene_id, cost_delta, category="location")
 
     after_state = {
         "amount": estimated_cost,
