@@ -20,6 +20,8 @@ from google.adk.tools.mcp_tool import (
     StreamableHTTPConnectionParams,
 )
 
+from shared.secret_client import get_secret_json, persist_secret
+
 _TOKEN_FILE = Path.home() / ".cinemapilot" / "grafana_mcp_token.json"
 _TOKEN_ENDPOINT = "https://mcp.grafana.com/mcp/oauth/token"
 _DEFAULT_GRAFANA_URL = "https://daringhamster1557.grafana.net"
@@ -38,10 +40,49 @@ def _decode_jwt_payload(jwt_str: str) -> Dict[str, Any]:
     return {}
 
 
+def _load_raw_token_data() -> Dict[str, Any]:
+    """
+    Load raw token data dictionary from:
+    1. Environment variable (GRAFANA_MCP_TOKEN)
+    2. GCP Secret Manager (GRAFANA_MCP_TOKEN)
+    3. Local cache file (~/.cinemapilot/grafana_mcp_token.json)
+    """
+    # 1. Env var
+    env_token = os.environ.get("GRAFANA_MCP_TOKEN")
+    if env_token:
+        try:
+            return json.loads(env_token)
+        except Exception:
+            # If env var is directly the access_token string
+            return {"access_token": env_token}
+
+    # 2. Secret Manager
+    try:
+        sm_token = get_secret_json("GRAFANA_MCP_TOKEN")
+        if sm_token and isinstance(sm_token, dict) and sm_token.get("access_token"):
+            return sm_token
+    except Exception as exc:
+        print(f"[grafana_client] Debug: Secret Manager token fetch skipped: {exc}")
+
+    # 3. Local disk cache fallback
+    if _TOKEN_FILE.exists():
+        try:
+            return json.loads(_TOKEN_FILE.read_text(encoding="utf-8"))
+        except Exception as exc:
+            print(f"[grafana_client] Warning: Failed to read local token file {_TOKEN_FILE}: {exc}")
+
+    raise RuntimeError(
+        f"Grafana MCP token not found in environment (GRAFANA_MCP_TOKEN), "
+        f"GCP Secret Manager ('GRAFANA_MCP_TOKEN'), or local file ({_TOKEN_FILE}). "
+        "Please run `python infra/grafana_oauth_bootstrap.py` or populate Secret Manager."
+    )
+
+
 def refresh_grafana_token(token_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Use cached refresh_token to obtain a new access_token (and updated refresh_token).
-    Saves the refreshed tokens and issued_at timestamp to ~/.cinemapilot/grafana_mcp_token.json.
+    Saves the refreshed tokens locally AND persists them to GCP Secret Manager
+    so ephemeral Cloud Run containers retain refreshed tokens across restarts.
 
     Raises:
         RuntimeError: If refresh fails (e.g. refresh_token expired), prompting re-authorization.
@@ -49,7 +90,7 @@ def refresh_grafana_token(token_data: Dict[str, Any]) -> Dict[str, Any]:
     refresh_token = token_data.get("refresh_token")
     if not refresh_token:
         raise RuntimeError(
-            f"Grafana token file ({_TOKEN_FILE}) missing 'refresh_token'. "
+            f"Grafana token data missing 'refresh_token'. "
             "Please run `python infra/grafana_oauth_bootstrap.py` to authenticate."
         )
 
@@ -90,16 +131,27 @@ def refresh_grafana_token(token_data: Dict[str, Any]) -> Dict[str, Any]:
     if "refresh_token" not in new_token_data:
         new_token_data["refresh_token"] = refresh_token
 
-    _TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(_TOKEN_FILE, "w", encoding="utf-8") as f:
-        json.dump(new_token_data, f, indent=2)
-
+    # 1. Attempt to save locally (for local development fallback)
     try:
-        os.chmod(_TOKEN_FILE, 0o600)
-    except Exception:
-        pass
+        _TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_TOKEN_FILE, "w", encoding="utf-8") as f:
+            json.dump(new_token_data, f, indent=2)
+        try:
+            os.chmod(_TOKEN_FILE, 0o600)
+        except Exception:
+            pass
+        print(f"[grafana_client] Saved refreshed token locally to {_TOKEN_FILE}")
+    except Exception as exc:
+        print(f"[grafana_client] Note: Local disk token write skipped (ephemeral container): {exc}")
 
-    print(f"[grafana_client] Successfully refreshed token and saved to {_TOKEN_FILE}")
+    # 2. Persist to GCP Secret Manager (critical for Cloud Run container lifecycle persistence)
+    token_json_str = json.dumps(new_token_data, indent=2)
+    persisted = persist_secret("GRAFANA_MCP_TOKEN", token_json_str)
+    if persisted:
+        print("[grafana_client] Refreshed token successfully persisted to GCP Secret Manager (GRAFANA_MCP_TOKEN).")
+    else:
+        print("[grafana_client] Notice: Refreshed token active in memory; Secret Manager update skipped or unauthorized.")
+
     return new_token_data
 
 
@@ -110,19 +162,7 @@ def get_valid_access_token() -> str:
     Returns:
         Valid OAuth 2.1 Bearer access token string.
     """
-    if not _TOKEN_FILE.exists():
-        raise RuntimeError(
-            f"Grafana MCP token file not found at {_TOKEN_FILE}. "
-            "Please run `python infra/grafana_oauth_bootstrap.py` first to authenticate."
-        )
-
-    try:
-        token_data = json.loads(_TOKEN_FILE.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to read Grafana MCP token from {_TOKEN_FILE}: {exc}. "
-            "Please re-run `python infra/grafana_oauth_bootstrap.py`."
-        ) from exc
+    token_data = _load_raw_token_data()
 
     access_token = token_data.get("access_token")
     if not access_token:
