@@ -4,6 +4,16 @@
 
 Built for the [Agentic Cinema: The Blockbuster Hackathon](https://agentic-cinema.devpost.com/) — **Grafana partner track**.
 
+## The 2 AM phone call this is meant to prevent
+
+A location scout finds out the beach they booked for Scene 5 is closed for the week — maybe a permit fell through, maybe the tide schedule changed. It's a five-minute problem to *describe*. It is not a five-minute problem to *resolve*.
+
+By morning, the budget lead needs new cost estimates. Scheduling needs to know if the shoot day still works. The storyboard artist has drawn the wrong location. The composer scored a scene that no longer exists in that setting. Risk and safety need to re-check weather and logistics for the new site. And somewhere in a group chat, someone is trying to explain *why* all of this is happening to eight different people who each only see their own corner of it.
+
+Right now, a single screenplay gets manually re-read by 10–20 people across a production, each department reconstructing the same information independently, and every change ripples through by hand, department by department, Slack message by Slack message.
+
+CinemaPilot is what happens if that screenplay only has to be read once — by a system that never forgets what it extracted, and that knows exactly which departments a change actually touches, so nobody has to manually chase down who needs to know.
+
 ## The problem
 
 A single screenplay is currently manually re-read by 10–20 people across a film production — director, producer, budget, casting, storyboard, music, scheduling, location scouting — each department recreating the same information independently. CinemaPilot extracts a screenplay's structured data once and republishes it as department-specific, continuously-updated assets, automatically propagating downstream when anything changes.
@@ -34,7 +44,7 @@ Explanation Agent  (pure synthesis of prior agents' reasoning into a plain-langu
 
 **13 agents total:** Script Intelligence, Change Detection, Budget, Location, Risk, Schedule, Storyboard, Music, Director, Casting, Voice, Producer, Explanation.
 
-**Signature demo:** moving Scene 5 from an interior warehouse to an exterior beach location triggers exactly 6 affected agents (not all 13), cascading real cost recalculation, risk assessment, rescheduling, and freshly generated storyboard/music assets — all traceable through one causal audit log.
+**Signature demo:** moving Scene 5 from an interior warehouse to an exterior beach location triggers exactly 6 affected agents (not all 13) — this is the 2 AM phone call scenario made real. Cost recalculation, risk assessment, rescheduling, and freshly generated storyboard/music assets cascade automatically, all traceable through one causal audit log, in the time it takes to read this sentence.
 
 ## Grafana integration (partner track requirement)
 
