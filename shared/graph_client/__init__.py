@@ -26,6 +26,8 @@ from typing import Any
 from google.api_core.exceptions import GoogleAPIError
 from google.cloud import bigquery
 
+from shared.graph_projection import build_scene_edges
+
 
 # ---------------------------------------------------------------------------
 # Custom exception
@@ -243,6 +245,16 @@ class ProductionGraphClient:
         """
         rows = self._run(sql, [self._s("scene_id", "STRING", scene_id)])
         return rows[0] if rows else None
+
+    def get_scene_edges(self, scene_id: str) -> list[dict[str, str]]:
+        """Return normalized read-only graph edges for a scene's relationships.
+
+        The scene record remains the source of truth. This method only projects
+        its location, character, and prop references into a graph-friendly form.
+        An unknown scene has no edges.
+        """
+        scene = self.get_scene(scene_id)
+        return build_scene_edges(scene) if scene else []
 
     def list_scenes(self) -> list[dict]:
         """
@@ -1460,4 +1472,3 @@ class ProductionGraphClient:
         ORDER BY event_timestamp ASC
         """
         return self._run(sql, [self._s("entity_id", "STRING", entity_id)])
-
