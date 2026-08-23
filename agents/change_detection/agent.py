@@ -64,10 +64,10 @@ _ALWAYS = None  # Sentinel: trigger on any change to this entity type.
 
 TRIGGER_RULES: dict[str, list[tuple[set[str] | None, list[str]]]] = {
     "scene": [
-        ({"location_id"},    ["budget", "location", "storyboard", "schedule", "music", "risk"]),
+        ({"location_id"},    ["budget", "location", "storyboard", "schedule", "music", "risk", "trailer"]),
         ({"character_ids"},  ["casting", "budget"]),
-        ({"emotional_tone"}, ["director", "music"]),
-        ({"camera_cues"},    ["director", "storyboard"]),
+        ({"emotional_tone"}, ["director", "music", "trailer"]),
+        ({"camera_cues"},    ["director", "storyboard", "trailer"]),
     ],
     "location": [
         ({"cost_profile"},        ["budget"]),
@@ -412,7 +412,7 @@ if __name__ == "__main__":
 
     rd = relocation_decisions[0]
     expected_fields  = ["location_id"]
-    expected_agents  = ["budget", "location", "storyboard", "schedule", "music", "risk"]
+    expected_agents  = ["budget", "location", "storyboard", "schedule", "music", "risk", "trailer"]
 
     field_ok  = rd["changed_fields"] == expected_fields
     agents_ok = rd["triggered_agents"] == expected_agents
@@ -487,4 +487,3 @@ if __name__ == "__main__":
     else:
         print("\n  Loop-prevention FAILED - see output above.")
         sys.exit(1)
-

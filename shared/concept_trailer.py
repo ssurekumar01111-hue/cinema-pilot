@@ -28,6 +28,17 @@ class TrailerShot:
     emotional_intent: str
 
 
+@dataclass(frozen=True)
+class TrailerVideo:
+    """A video input that can be assembled into the final trailer."""
+
+    scene_id: str
+    video_path: Path
+    provider: str
+    is_placeholder: bool
+    fallback_reason: str | None = None
+
+
 def build_concept_trailer_plan(
     scene_assets: Sequence[Mapping[str, Any]],
     *,
@@ -86,8 +97,6 @@ def build_concept_trailer_plan(
         )
         for asset in selected
     ]
-
-
 def render_concept_trailer(
     shots: Sequence[TrailerShot],
     output_path: str | Path,
@@ -178,4 +187,107 @@ def render_concept_trailer(
 
     if not destination.is_file():
         raise TrailerRenderError("ffmpeg completed but did not create the concept trailer.")
+    return destination
+
+
+def render_veo_placeholder(
+    shot: TrailerShot,
+    output_path: str | Path,
+    *,
+    ffmpeg_binary: str = "ffmpeg",
+    fps: int = 24,
+    width: int = 1280,
+    height: int = 720,
+) -> TrailerVideo:
+    """Create a local MP4 stand-in for one future Veo clip.
+
+    The result deliberately says ``local-placeholder`` rather than claiming a
+    Veo request happened. The next trailer step still receives a normal MP4 and
+    can be developed without a cloud key or paid generation.
+    """
+    video_path = render_concept_trailer(
+        [shot],
+        output_path,
+        ffmpeg_binary=ffmpeg_binary,
+        fps=fps,
+        width=width,
+        height=height,
+    )
+    return TrailerVideo(
+        scene_id=shot.scene_id,
+        video_path=video_path,
+        provider="local-placeholder",
+        is_placeholder=True,
+    )
+
+
+def render_trailer_from_videos(
+    videos: Sequence[TrailerVideo],
+    output_path: str | Path,
+    *,
+    music_path: str | Path | None = None,
+    ffmpeg_binary: str = "ffmpeg",
+    fps: int = 24,
+    width: int = 1280,
+    height: int = 720,
+) -> Path:
+    """Assemble video clips, including local Veo placeholders, into a trailer."""
+    if not videos:
+        raise TrailerRenderError("A trailer needs at least one video clip.")
+    if fps < 1 or width < 1 or height < 1:
+        raise ValueError("fps, width and height must be positive")
+    for video in videos:
+        if not video.video_path.is_file():
+            raise TrailerRenderError(f"Video clip not found: {video.video_path}")
+
+    resolved_music = Path(music_path) if music_path else None
+    if resolved_music and not resolved_music.is_file():
+        raise TrailerRenderError(f"Music file not found: {resolved_music}")
+
+    destination = Path(output_path)
+    if destination.suffix.lower() != ".mp4":
+        raise TrailerRenderError("Trailer output must have an .mp4 extension.")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    command = [ffmpeg_binary, "-y"]
+    for video in videos:
+        command.extend(["-i", str(video.video_path)])
+    if resolved_music:
+        command.extend(["-stream_loop", "-1", "-i", str(resolved_music)])
+
+    filter_parts: list[str] = []
+    video_labels: list[str] = []
+    for index in range(len(videos)):
+        label = f"v{index}"
+        filter_parts.append(
+            f"[{index}:v]"
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,"
+            f"setsar=1,fps={fps},format=yuv420p[{label}]"
+        )
+        video_labels.append(f"[{label}]")
+    filter_parts.append(f"{''.join(video_labels)}concat=n={len(videos)}:v=1:a=0[video]")
+
+    command.extend(["-filter_complex", ";".join(filter_parts), "-map", "[video]"])
+    if resolved_music:
+        command.extend(["-map", f"{len(videos)}:a:0", "-shortest", "-c:a", "aac", "-b:a", "192k"])
+    command.extend([
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        str(destination),
+    ])
+
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise TrailerRenderError(
+            "ffmpeg is not installed or is not available on PATH."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or exc.stdout or "ffmpeg failed without output").strip()
+        raise TrailerRenderError(f"ffmpeg could not render the trailer: {details}") from exc
+
+    if not destination.is_file():
+        raise TrailerRenderError("ffmpeg completed but did not create the trailer.")
     return destination
