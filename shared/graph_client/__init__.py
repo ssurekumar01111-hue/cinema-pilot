@@ -257,6 +257,13 @@ class ProductionGraphClient:
         sql = f"SELECT * FROM {self._table('scenes')} ORDER BY timeline_position ASC"
         return self._run(sql, [])
 
+    def get_scene_edges(self, scene_id: str) -> list[dict[str, str]]:
+        """Return a read-only Scene -> Location / Characters / Props projection."""
+        from shared.graph_projection import build_scene_edges
+
+        scene = self.get_scene(scene_id)
+        return build_scene_edges(scene) if scene else []
+
     # -----------------------------------------------------------------------
     # CHARACTERS
     # -----------------------------------------------------------------------
@@ -1141,6 +1148,62 @@ class ProductionGraphClient:
         return rows[0] if rows else None
 
     # -----------------------------------------------------------------------
+    # PRODUCTION TRAILERS
+    # -----------------------------------------------------------------------
+
+    def upsert_trailer(self, record: dict) -> None:
+        """Create or update the single latest production trailer record."""
+        sql = f"""
+        MERGE {self._table('trailers')} AS target
+        USING (SELECT @trailer_id AS trailer_id) AS source
+        ON target.trailer_id = source.trailer_id
+        WHEN MATCHED THEN UPDATE SET
+            source_scene_id = @source_scene_id,
+            source_scene_ids = @source_scene_ids,
+            music_source_scene_id = @music_source_scene_id,
+            gs_uri = @gs_uri,
+            status = @status,
+            generation_mode = @generation_mode,
+            clip_count = @clip_count,
+            fallback_scene_ids = @fallback_scene_ids,
+            captioned_scene_ids = @captioned_scene_ids,
+            error = @error,
+            version = target.version + 1,
+            updated_at = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN INSERT
+            (trailer_id, source_scene_id, source_scene_ids, music_source_scene_id,
+             gs_uri, status, generation_mode, clip_count, fallback_scene_ids,
+             captioned_scene_ids, error, version, updated_at)
+        VALUES
+            (@trailer_id, @source_scene_id, @source_scene_ids, @music_source_scene_id,
+             @gs_uri, @status, @generation_mode, @clip_count, @fallback_scene_ids,
+             @captioned_scene_ids, @error, 1, CURRENT_TIMESTAMP())
+        """
+        self._run(sql, [
+            self._s("trailer_id", "STRING", record.get("trailer_id", "tr_project")),
+            self._s("source_scene_id", "STRING", record.get("source_scene_id")),
+            self._a("source_scene_ids", "STRING", record.get("source_scene_ids", [])),
+            self._s("music_source_scene_id", "STRING", record.get("music_source_scene_id")),
+            self._s("gs_uri", "STRING", record.get("gs_uri")),
+            self._s("status", "STRING", record.get("status", "pending")),
+            self._s("generation_mode", "STRING", record.get("generation_mode")),
+            self._s("clip_count", "INT64", record.get("clip_count", 0)),
+            self._a("fallback_scene_ids", "STRING", record.get("fallback_scene_ids", [])),
+            self._a("captioned_scene_ids", "STRING", record.get("captioned_scene_ids", [])),
+            self._s("error", "STRING", record.get("error")),
+        ])
+
+    def get_trailer(self, trailer_id: str = "tr_project") -> dict | None:
+        """Return the latest production trailer metadata record."""
+        sql = f"""
+        SELECT * FROM {self._table('trailers')}
+        WHERE trailer_id = @trailer_id
+        LIMIT 1
+        """
+        rows = self._run(sql, [self._s("trailer_id", "STRING", trailer_id)])
+        return rows[0] if rows else None
+
+    # -----------------------------------------------------------------------
     # PRODUCER OVERVIEWS
     # -----------------------------------------------------------------------
 
@@ -1460,4 +1523,3 @@ class ProductionGraphClient:
         ORDER BY event_timestamp ASC
         """
         return self._run(sql, [self._s("entity_id", "STRING", entity_id)])
-

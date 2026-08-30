@@ -127,6 +127,51 @@ class AssetStorageClient:
                     content_type = "audio/mpeg"
                 elif filename.endswith(".wav"):
                     content_type = "audio/wav"
+                elif filename.endswith(".mp4"):
+                    content_type = "video/mp4"
+                else:
+                    content_type = "application/octet-stream"
+            return data, content_type
+        except AssetStorageError:
+            raise
+        except GoogleAPIError as exc:
+            raise AssetStorageError(f"Cloud Storage download failed: {exc}") from exc
+        except Exception as exc:
+            raise AssetStorageError(f"Unexpected error downloading asset: {exc}") from exc
+
+    def download_gs_uri(self, gs_uri: str) -> tuple[bytes, str]:
+        """Download an existing ``gs://`` asset without reconstructing its path.
+
+        Trailer assembly needs storyboard and music records as they already
+        exist in the graph, while the dashboard media proxy uses structured
+        paths.  Both routes stay inside this one storage client.
+        """
+        if not gs_uri.startswith("gs://"):
+            raise AssetStorageError(f"Invalid GCS URI '{gs_uri}'. Expected 'gs://...'")
+        parts = gs_uri[5:].split("/", 1)
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise AssetStorageError(f"Invalid GCS URI format '{gs_uri}'.")
+
+        bucket_name, blob_path = parts
+        try:
+            bucket = self._gcs.bucket(bucket_name)
+            blob = bucket.blob(blob_path)
+            if not blob.exists():
+                raise AssetStorageError(f"Asset '{blob_path}' not found in bucket '{bucket_name}'.")
+            data = blob.download_as_bytes()
+            content_type = blob.content_type
+            if not content_type:
+                filename = blob_path.lower()
+                if filename.endswith(".png"):
+                    content_type = "image/png"
+                elif filename.endswith((".jpg", ".jpeg")):
+                    content_type = "image/jpeg"
+                elif filename.endswith(".mp3"):
+                    content_type = "audio/mpeg"
+                elif filename.endswith(".wav"):
+                    content_type = "audio/wav"
+                elif filename.endswith(".mp4"):
+                    content_type = "video/mp4"
                 else:
                     content_type = "application/octet-stream"
             return data, content_type

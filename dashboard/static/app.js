@@ -4,6 +4,7 @@ let currentTab = 'scenes';
 let scenes = [];
 let activeSceneId = null;
 let auditEvents = [];
+let trailerGenerating = false;
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
@@ -124,6 +125,36 @@ function selectScene(sceneId) {
   loadSceneDetail(sceneId);
 }
 
+async function generateProductionTrailer() {
+  if (!activeSceneId || trailerGenerating) return;
+
+  const button = document.getElementById('generate-trailer-btn');
+  trailerGenerating = true;
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Generating trailer...';
+  }
+
+  try {
+    const res = await fetch('/api/trailer/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_scene_id: activeSceneId }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+    await Promise.all([loadSceneDetail(activeSceneId), loadEvents()]);
+  } catch (err) {
+    alert(`Trailer was not generated: ${err.message}`);
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Generate production trailer';
+    }
+  } finally {
+    trailerGenerating = false;
+  }
+}
+
 // ----------------------------------------------------------------------------
 // SCENE DETAIL
 // ----------------------------------------------------------------------------
@@ -166,6 +197,8 @@ function renderSceneDetail(data) {
     director_note,
     producer_overview,
     explanation,
+    scene_edges,
+    trailer,
   } = data;
 
   const container = document.getElementById('scene-detail-container');
@@ -294,6 +327,55 @@ function renderSceneDetail(data) {
       </div>
     `;
   }
+
+  // Build Production Trailer Card
+  let trailerHtml = `
+    <div class="cascade-card trailer-card">
+      <div class="cascade-card-header">
+        <div class="cascade-card-title">🎞️ Production Trailer</div>
+        <span class="badge badge-amber">Not generated</span>
+      </div>
+      <p class="trailer-detail">Choose a scene and generate a project trailer from the first / middle / last available storyboard panels.</p>
+    </div>
+  `;
+  if (trailer) {
+    const mode = trailer.generation_mode || trailer.status || 'pending';
+    const modeClass = mode === 'veo' ? 'badge-emerald' : mode === 'mixed' ? 'badge-amber' : mode === 'local-placeholder' ? 'badge-indigo' : 'badge-rose';
+    const trailerMeta = [
+      trailer.source_scene_ids && trailer.source_scene_ids.length ? `Scenes: ${trailer.source_scene_ids.join(' / ')}` : '',
+      trailer.captioned_scene_ids && trailer.captioned_scene_ids.length ? `Captions: ${trailer.captioned_scene_ids.join(' / ')}` : '',
+      trailer.fallback_scene_ids && trailer.fallback_scene_ids.length ? `Storyboard fallback: ${trailer.fallback_scene_ids.join(' / ')}` : '',
+    ].filter(Boolean).map(text => `<div class="trailer-detail">${escapeHtml(text)}</div>`).join('');
+    const player = trailer.media_url ? `
+      <video class="trailer-video" controls preload="metadata">
+        <source src="${escapeHtml(trailer.media_url)}" type="video/mp4">
+        Your browser does not support the video player.
+      </video>
+    ` : '<div class="empty-state" style="padding: 20px;">Trailer metadata exists but no playable MP4 is available yet.</div>';
+    trailerHtml = `
+      <div class="cascade-card trailer-card">
+        <div class="cascade-card-header">
+          <div class="cascade-card-title">🎞️ Production Trailer</div>
+          <span class="badge ${modeClass}">${escapeHtml(mode)}</span>
+        </div>
+        ${player}
+        ${trailerMeta}
+        ${trailer.error ? `<div class="trailer-warning">${escapeHtml(trailer.error)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  // Build compact graph connection card from the read-only edge projection
+  const edges = scene_edges || [];
+  const edgeGroups = [
+    ['USES_LOCATION', 'Location'],
+    ['FEATURES_CHARACTER', 'Characters'],
+    ['USES_PROP', 'Props'],
+  ].map(([type, label]) => {
+    const targets = edges.filter(edge => edge.type === type).map(edge => edge.to);
+    return targets.length ? `<div class="graph-edge-row"><strong>${label}</strong><span>${targets.map(escapeHtml).join(' / ')}</span></div>` : '';
+  }).join('');
+  const graphConnectionsHtml = edgeGroups || '<span style="color: var(--text-dim); font-size: 0.8rem;">No graph connections recorded</span>';
 
   // Build Risk Flags Card
   let riskHtml = `
@@ -481,6 +563,9 @@ function renderSceneDetail(data) {
           <h1 class="scene-main-title">Scene ${scene.scene_number || scene.scene_id.replace('scene_', '')}: ${escapeHtml(locName)}</h1>
           <div class="scene-subtitle">Production Node: ${escapeHtml(scene.scene_id)} • Timeline Pos #${scene.timeline_position}</div>
         </div>
+        <button id="generate-trailer-btn" class="btn-generate-trailer" onclick="generateProductionTrailer()" ${trailerGenerating ? 'disabled' : ''}>
+          ${trailerGenerating ? 'Generating trailer...' : 'Generate production trailer'}
+        </button>
         <div class="scene-meta-badges">
           <span class="badge badge-blue">Tone: ${escapeHtml(scene.emotional_tone || 'Standard')}</span>
           <span class="badge badge-purple">${escapeHtml(locType)}</span>
@@ -509,6 +594,11 @@ function renderSceneDetail(data) {
         <div class="card-title-sm">📦 Required Props (${props ? props.length : 0})</div>
         <div class="pill-list">${propsHtml}</div>
       </div>
+
+      <div class="context-card">
+        <div class="card-title-sm">🔗 Production Graph Connections</div>
+        <div class="graph-edge-list">${graphConnectionsHtml}</div>
+      </div>
     </div>
 
     <!-- Explanation Hero Story Section -->
@@ -523,6 +613,7 @@ function renderSceneDetail(data) {
     <div class="cascade-grid">
       ${storyboardHtml}
       ${musicHtml}
+      ${trailerHtml}
       ${riskHtml}
       ${budgetHtml}
       ${scheduleHtml}
@@ -570,6 +661,7 @@ function renderTimeline() {
     let afterParsed = ev.after_state;
     try { if (typeof beforeParsed === 'string') beforeParsed = JSON.parse(beforeParsed); } catch(e) {}
     try { if (typeof afterParsed === 'string') afterParsed = JSON.parse(afterParsed); } catch(e) {}
+    const routingReason = afterParsed && afterParsed.routing_reason;
 
     return `
       <div class="timeline-event-card">
@@ -598,6 +690,7 @@ function renderTimeline() {
             <pre class="timeline-state-box">${escapeHtml(JSON.stringify(afterParsed, null, 2))}</pre>
           </div>
         </div>
+        ${routingReason ? `<div class="routing-reason">Routing reason: ${escapeHtml(routingReason)}</div>` : ''}
       </div>
     `;
   }).join('');

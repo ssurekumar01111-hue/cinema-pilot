@@ -34,6 +34,8 @@ Change Detection Agent  (diffs the graph, computes exactly which agents are affe
       │
       ├──► Budget      ├──► Location    ├──► Risk
       ├──► Schedule     ├──► Storyboard  ├──► Music
+      │                    │                 │
+      │                    └──────► Trailer Agent ───► Production trailer MP4
       │
       ▼
 Producer Agent  (synthesizes budget/schedule/risk into an overview)
@@ -42,9 +44,9 @@ Producer Agent  (synthesizes budget/schedule/risk into an overview)
 Explanation Agent  (pure synthesis of prior agents' reasoning into a plain-language narrative)
 ```
 
-**13 agents total:** Script Intelligence, Change Detection, Budget, Location, Risk, Schedule, Storyboard, Music, Director, Casting, Voice, Producer, Explanation.
+**14 agents total:** Script Intelligence, Change Detection, Budget, Location, Risk, Schedule, Storyboard, Music, Trailer, Director, Casting, Voice, Producer, Explanation.
 
-**Signature demo:** moving Scene 5 from an interior warehouse to an exterior beach location triggers exactly 6 affected agents (not all 13) — this is the 2 AM phone call scenario made real. Cost recalculation, risk assessment, rescheduling, and freshly generated storyboard/music assets cascade automatically, all traceable through one causal audit log, in the time it takes to read this sentence.
+**Signature demo:** moving Scene 5 from an interior warehouse to an exterior beach location routes exactly 7 affected agents (not all 14) — Budget, Location, Storyboard, Schedule, Music, Risk and Trailer. Cost recalculation, risk assessment, rescheduling, refreshed assets and a traceable trailer fallback all sit in one causal audit log.
 
 ## Grafana integration (partner track requirement)
 
@@ -59,8 +61,8 @@ Both use ADK's `McpToolset` over Streamable HTTP with OAuth 2.1 + Dynamic Client
 
 - **Reasoning:** Gemini (via `google-genai`)
 - **Orchestration:** Google ADK (`google-adk`) for Grafana MCP tool calling
-- **Data:** BigQuery (Production Graph — 13 tables, event-sourced, all queries parameterized)
-- **Generative media:** `gemini-3.1-flash-image` (storyboards — [see model note](#model-note-storyboard-image-generation)), Lyria 3 (music cues), Gemini TTS (multi-speaker dialogue previews)
+- **Data:** BigQuery (Production Graph — 16 tables, event-sourced, all queries parameterized)
+- **Generative media:** `gemini-3.1-flash-image` (storyboards — [see model note](#model-note-storyboard-image-generation)), Veo 3.1 image-to-video (explicit trailer clips), Lyria 3 (music cues), Gemini TTS (multi-speaker dialogue previews)
 - **Asset storage:** Google Cloud Storage, IAM-impersonated V4 signed URLs
 - **Partner integration:** Grafana Cloud MCP (Incidents, Prometheus, Loki)
 
@@ -138,7 +140,19 @@ python agents/script_intelligence/agent.py
 python scripts/test_full_cascade.py
 ```
 
-This resets Scene 5 to its original location, fires a single relocation event, and shows Change Detection triggering exactly the 6 affected agents in sequence, followed by Producer and Explanation synthesizing the results — with the full causal audit trail printed at the end.
+This resets Scene 5 to its original location, fires a single relocation event, and shows Change Detection routing exactly the 7 affected agents in sequence, followed by Producer and Explanation synthesizing the results — with the full causal audit trail printed at the end.
+
+**Generate a production trailer from the dashboard:**
+```
+uvicorn dashboard.backend:app --reload
+```
+Open `http://localhost:8000`, select a scene, then choose **Generate production trailer**. The selected scene supplies a completed Lyria cue when one exists. The trailer uses the first / middle / last ready storyboard panels across the timeline and may submit up to three Veo requests. If Veo is not configured or one clip fails, the dashboard clearly labels the storyboard MP4 fallback instead of calling it a Veo result.
+
+**Deploy the dashboard to Cloud Run:**
+```
+gcloud run deploy cinemapilot-dashboard --source . --region <region> --timeout 900
+```
+Set `GEMINI_API_KEY` in the same Secret Manager flow used by storyboard generation before a live Veo demo. The 900-second request timeout is intentional because one dashboard click can wait for up to three Veo clips.
 
 **Run an individual agent:**
 ```
