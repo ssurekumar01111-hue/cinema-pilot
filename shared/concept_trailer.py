@@ -65,6 +65,18 @@ def _run(command: list[str], runner: Callable[..., subprocess.CompletedProcess] 
         raise TrailerRenderError(f"ffmpeg failed: {detail}") from exc
 
 
+def _get_ffmpeg_cmd() -> str:
+    import shutil
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"
+
+
 def render_trailer(
     shots: Iterable[TrailerShot],
     output_path: Path,
@@ -77,6 +89,7 @@ def render_trailer(
     if not selected:
         raise TrailerRenderError("at least one storyboard shot is required")
 
+    ffmpeg_bin = _get_ffmpeg_cmd()
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     work_dir = output_path.parent
@@ -86,7 +99,7 @@ def render_trailer(
 
     for index, shot in enumerate(selected):
         clip_path = work_dir / f"clip_{index}.mp4"
-        command = ["ffmpeg", "-y"]
+        command = [ffmpeg_bin, "-y"]
         if shot.media_kind == "image":
             command.extend(["-loop", "1", "-i", str(shot.media_path), "-t", str(TRAILER_CLIP_SECONDS)])
         elif shot.media_kind == "video":
@@ -115,7 +128,7 @@ def render_trailer(
 
     concat_file = work_dir / "clips.txt"
     concat_file.write_text("".join(f"file '{path}'\n" for path in rendered), encoding="utf-8")
-    command = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file)]
+    command = [ffmpeg_bin, "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file)]
     if music_path:
         # Only the existing Lyria cue is mixed. Each visual clip was rendered with -an.
         command.extend(["-stream_loop", "-1", "-i", str(music_path), "-map", "0:v:0", "-map", "1:a:0", "-shortest", "-c:v", "copy", "-c:a", "aac"])

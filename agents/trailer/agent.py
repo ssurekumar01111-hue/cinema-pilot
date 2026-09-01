@@ -90,13 +90,21 @@ def _persist(
     before_state: dict[str, Any] | None,
     cascade_id: str | None,
 ) -> None:
+    cleaned_before = {
+        k: (v.isoformat() if hasattr(v, "isoformat") else v)
+        for k, v in (before_state or {}).items()
+    }
+    cleaned_after = {
+        k: (v.isoformat() if hasattr(v, "isoformat") else v)
+        for k, v in {**record, **({"cascade_id": cascade_id} if cascade_id else {})}.items()
+    }
     graph.upsert_trailer(record)
     graph.log_event(
         actor_agent="trailer_agent",
         entity_type="trailer",
         entity_id=TRAILER_ENTITY_ID,
-        before_state=before_state or {},
-        after_state={**record, **({"cascade_id": cascade_id} if cascade_id else {})},
+        before_state=cleaned_before,
+        after_state=cleaned_after,
         triggered_agents=[],
     )
 

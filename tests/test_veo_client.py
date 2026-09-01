@@ -18,10 +18,7 @@ class VeoClientTests(unittest.TestCase):
         client = MagicMock()
         client.models.generate_videos.return_value = operation
 
-        def download(*, file, destination):
-            Path(destination).write_bytes(b"video")
-
-        client.files.download.side_effect = download
+        client.files.download.return_value = b"video"
 
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

@@ -38,24 +38,27 @@ def generate_image_to_video(
     try:
         from google import genai
         from google.genai import types
-        from PIL import Image
     except ImportError as exc:
         raise VeoGenerationError("Veo dependencies are not installed") from exc
 
     try:
         client = genai.Client(api_key=api_key)
-        with Image.open(image_path) as image:
-            operation = client.models.generate_videos(
-                model=VEO_MODEL,
-                prompt=prompt,
-                image=image.copy(),
-                config=types.GenerateVideosConfig(
-                    aspect_ratio="16:9",
-                    resolution="720p",
-                    duration_seconds=8,
-                    person_generation="allow_adult",
-                ),
-            )
+        image_bytes = Path(image_path).read_bytes()
+        suffix = Path(image_path).suffix.lower()
+        mime_type = "image/jpeg" if suffix in (".jpg", ".jpeg") else "image/png"
+        image_input = types.Image(image_bytes=image_bytes, mime_type=mime_type)
+
+        operation = client.models.generate_videos(
+            model=VEO_MODEL,
+            prompt=prompt,
+            image=image_input,
+            config=types.GenerateVideosConfig(
+                aspect_ratio="16:9",
+                resolution="720p",
+                duration_seconds=8,
+                person_generation="allow_adult",
+            ),
+        )
 
         deadline = clock() + timeout_seconds
         while not operation.done:
@@ -70,9 +73,10 @@ def generate_image_to_video(
 
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        client.files.download(file=generated[0].video, destination=str(output_path))
-        if not output_path.exists() or output_path.stat().st_size == 0:
+        video_bytes = client.files.download(file=generated[0].video)
+        if not video_bytes:
             raise VeoGenerationError("Veo download returned an empty clip")
+        output_path.write_bytes(video_bytes)
         return output_path
     except VeoGenerationError:
         raise
