@@ -52,6 +52,7 @@ CinemaPilot actively calls the **Grafana Cloud MCP server** at runtime:
 
 - **Risk Agent** (`agents/risk/agent.py`) — escalates high-severity, already-mitigated risks into real Grafana **Incidents** via `list_incidents`/`create_incident`, avoiding duplicates.
 - **Location Agent** (`agents/location/agent.py`) — queries `list_datasources`, `list_prometheus_metric_names`, and `query_loki_logs` for observability context on a location.
+- **Producer Agent** (`agents/producer/agent.py`) — before finalizing a plan, queries live Grafana incidents and this cascade's own OpenTelemetry failure metrics; blocks production readiness with explicit reasons if an active incident exists or the cascade had agent failures (three-state: ready/blocked/unknown, fails closed on Grafana connectivity errors).
 
 Both use ADK's `McpToolset` over Streamable HTTP with OAuth 2.1 + Dynamic Client Registration against `https://mcp.grafana.com/mcp`.
 
@@ -62,6 +63,7 @@ Both use ADK's `McpToolset` over Streamable HTTP with OAuth 2.1 + Dynamic Client
 - **Data:** BigQuery (Production Graph — 16 tables, event-sourced, all queries parameterized)
 - **Generative media:** `gemini-3.1-flash-image` (storyboards — [see model note](#model-note-storyboard-image-generation)), Veo 3.1 image-to-video (explicit trailer clips), Lyria 3 (music cues), Gemini TTS (multi-speaker dialogue previews)
 - **Asset storage:** Google Cloud Storage, IAM-impersonated V4 signed URLs
+- **Observability:** OpenTelemetry (`opentelemetry-sdk`) — per-agent duration/failure/cascade-status metrics exported to Grafana Cloud, correlated by `cascade_id`
 - **Partner integration:** Grafana Cloud MCP (Incidents, Prometheus, Loki)
 
 ## Repo structure
@@ -148,9 +150,9 @@ Open `http://localhost:8000`, select a scene, then choose **Generate production 
 
 **Deploy the dashboard to Cloud Run:**
 ```
-gcloud run deploy cinemapilot-dashboard --source . --region <region> --timeout 900
+gcloud run deploy cinemapilot-dashboard --source ./dashboard --region <region> --service-account cinemapilot-dashboard@cinemapilot-2026.iam.gserviceaccount.com
 ```
-Set `GEMINI_API_KEY` in the same Secret Manager flow used by storyboard generation before a live Veo demo. The 900-second request timeout is intentional because one dashboard click can wait for up to three Veo clips.
+Deploys the dashboard container built from `dashboard/Dockerfile` with the read-only service account (`roles/bigquery.dataViewer`, `roles/bigquery.jobUser`, `roles/storage.objectViewer`). The deployed dashboard is a read-only viewer against already-populated Production Graph data and serves media via the `/api/media` proxy. Trailer generation and the full agent cascade remain local operations (due to Grafana's interactive OAuth 2.1 authentication requirement).
 
 **Run an individual agent:**
 ```
