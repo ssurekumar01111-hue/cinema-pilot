@@ -197,6 +197,7 @@ VALID_PRODUCTION_AGENTS = frozenset({
     "schedule_agent",
     "storyboard_agent",
     "music_agent",
+    "trailer_agent",
     "director_agent",
     "casting_agent",
     "voice_agent",

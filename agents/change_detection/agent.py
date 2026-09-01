@@ -64,10 +64,10 @@ _ALWAYS = None  # Sentinel: trigger on any change to this entity type.
 
 TRIGGER_RULES: dict[str, list[tuple[set[str] | None, list[str]]]] = {
     "scene": [
-        ({"location_id"},    ["budget", "location", "storyboard", "schedule", "music", "risk"]),
+        ({"location_id"},    ["budget", "location", "storyboard", "schedule", "music", "risk", "trailer"]),
         ({"character_ids"},  ["casting", "budget"]),
-        ({"emotional_tone"}, ["director", "music"]),
-        ({"camera_cues"},    ["director", "storyboard"]),
+        ({"emotional_tone"}, ["director", "music", "trailer"]),
+        ({"camera_cues"},    ["director", "storyboard", "trailer"]),
     ],
     "location": [
         ({"cost_profile"},        ["budget"]),
@@ -193,6 +193,19 @@ def _compute_triggered_agents(entity_type: str, changed_fields: set[str]) -> lis
     return triggered
 
 
+def _describe_routing_decision(
+    entity_type: str,
+    changed_fields: list[str],
+    triggered_agents: list[str],
+) -> str:
+    """Return the concise explanation stored beside a routing decision."""
+    fields = ", ".join(changed_fields) if changed_fields else "no business fields"
+    if not triggered_agents:
+        return f"{entity_type} changed in {fields} / no downstream agent is affected"
+    agents = ", ".join(triggered_agents)
+    return f"{entity_type} changed in {fields} / routed to {agents}"
+
+
 # ---------------------------------------------------------------------------
 # Main detection function
 # ---------------------------------------------------------------------------
@@ -276,6 +289,8 @@ def detect_changes(since_timestamp: datetime, cascade_id: str | None = None) -> 
             f"-> trigger={triggered}"
         )
 
+        routing_reason = _describe_routing_decision(entity_type, changed_fields, triggered)
+
         # Log routing decision in audit trail (only if there's something to trigger)
         if triggered:
             record_affected_agents_count(cascade_id or "standalone", len(triggered))
@@ -284,7 +299,7 @@ def detect_changes(since_timestamp: datetime, cascade_id: str | None = None) -> 
                 entity_type=entity_type,
                 entity_id=entity_id,
                 before_state=diff_before,
-                after_state=diff_after,
+                after_state={**diff_after, "routing_reason": routing_reason},
                 triggered_agents=triggered,
             )
 
@@ -294,6 +309,7 @@ def detect_changes(since_timestamp: datetime, cascade_id: str | None = None) -> 
             "entity_id":         entity_id,
             "changed_fields":    changed_fields,
             "triggered_agents":  triggered,
+            "reason":             routing_reason,
         })
 
     print(f"[change_detection] Done. {len(results)} decision(s) produced.")
@@ -487,4 +503,3 @@ if __name__ == "__main__":
     else:
         print("\n  Loop-prevention FAILED - see output above.")
         sys.exit(1)
-

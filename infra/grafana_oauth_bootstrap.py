@@ -13,11 +13,14 @@ import json
 import os
 import secrets
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 _CINEMAPILOT_DIR = Path.home() / ".cinemapilot"
 _TOKEN_FILE = _CINEMAPILOT_DIR / "grafana_mcp_token.json"
@@ -95,13 +98,15 @@ def run_oauth_flow() -> dict:
             pass
 
     server = HTTPServer(("localhost", 8080), CallbackHandler)
-    server.timeout = 300  # 5 minutes timeout to allow user authorization
-    print("\nWaiting for browser callback on http://localhost:8080/callback (timeout: 5 mins) ...")
-    server.handle_request()
+    server.timeout = 2  # Poll interval
+    deadline = time.time() + 600  # 10 minutes timeout
+    print("\nWaiting for browser callback on http://localhost:8080/callback (timeout: 10 mins) ...")
+    while "code" not in auth_code_holder and time.time() < deadline:
+        server.handle_request()
     server.server_close()
 
     if "code" not in auth_code_holder:
-        raise RuntimeError("Failed to capture authorization code from browser callback.")
+        raise RuntimeError("Failed to capture authorization code from browser callback (timeout).")
 
     auth_code = auth_code_holder["code"]
     print("\n[grafana_oauth_bootstrap] Step 2: Exchanging code for Bearer Token...")
@@ -123,8 +128,9 @@ def run_oauth_flow() -> dict:
 
 
 def save_token(token_data: dict) -> Path:
-    """Save token dict to ~/.cinemapilot/grafana_mcp_token.json."""
+    """Save token dict to ~/.cinemapilot/grafana_mcp_token.json and GCP Secret Manager."""
     import time
+    from shared.secret_client import persist_secret
     if "issued_at" not in token_data:
         token_data["issued_at"] = time.time()
     _CINEMAPILOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -135,6 +141,11 @@ def save_token(token_data: dict) -> Path:
         os.chmod(_TOKEN_FILE, 0o600)
     except Exception:
         pass
+
+    try:
+        persist_secret("GRAFANA_MCP_TOKEN", json.dumps(token_data))
+    except Exception as exc:
+        print(f"[grafana_oauth_bootstrap] Warning: Failed to persist token to Secret Manager: {exc}")
 
     print(f"\n[grafana_oauth_bootstrap] Token saved to {_TOKEN_FILE}")
     return _TOKEN_FILE

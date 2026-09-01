@@ -299,6 +299,22 @@ body {
   align-items: flex-start;
 }
 
+.btn-generate-trailer {
+  background: linear-gradient(135deg, #7c3aed, #2563eb);
+  color: #fff;
+  border: 1px solid rgba(196, 181, 253, 0.55);
+  border-radius: var(--radius-md);
+  padding: 9px 13px;
+  font: 600 0.82rem var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-generate-trailer:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .scene-title-row {
   display: flex;
   flex-direction: column;
@@ -540,6 +556,52 @@ body {
   white-space: pre-line;
 }
 
+.trailer-card {
+  grid-column: span 1;
+}
+
+.trailer-video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #090c10;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.trailer-detail {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.trailer-warning {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.1);
+  border-left: 3px solid var(--accent-amber);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  padding: 8px 10px;
+}
+
+.graph-edge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.graph-edge-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.graph-edge-row strong {
+  color: var(--accent-blue);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+}
+
 /* Risk Card */
 .risk-item {
   background: var(--bg-card);
@@ -616,6 +678,15 @@ body {
 
 .timeline-event-card:hover {
   border-color: var(--border-focus);
+}
+
+.routing-reason {
+  color: #bfdbfe;
+  background: rgba(37, 99, 235, 0.12);
+  border-left: 3px solid var(--accent-blue);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  padding: 8px 10px;
 }
 
 .timeline-event-top {
