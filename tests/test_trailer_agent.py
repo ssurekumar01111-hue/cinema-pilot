@@ -123,16 +123,17 @@ class TrailerAgentTests(unittest.TestCase):
         self.assertEqual(_caption_words({"dialogue_lines": [{"line": "one two three four five six seven eight nine"}]}),
                          ("one", "two", "three", "four", "five", "six", "seven", "eight"))
 
-    def test_dispatcher_preserves_trailer_order_and_rejects_unknown_agents(self):
+    def test_dispatcher_preserves_automatic_route_order_and_rejects_unknown_agents(self):
         calls = []
+        automatic_agents = ["budget", "location", "storyboard", "schedule", "music", "risk"]
         result = dispatch_routing_decision(
-            {"triggered_agents": ["storyboard", "music", "trailer"]},
-            {name: lambda name=name: calls.append(name) for name in ["storyboard", "music", "trailer"]},
+            {"triggered_agents": automatic_agents},
+            {name: lambda name=name: calls.append(name) for name in automatic_agents},
         )
-        self.assertEqual(calls, ["storyboard", "music", "trailer"])
+        self.assertEqual(calls, automatic_agents)
         self.assertEqual([name for name, _ in result], calls)
         with self.assertRaises(CascadeDispatchError):
-            dispatch_routing_decision({"triggered_agents": ["trailer", "missing"]}, {"trailer": lambda: None})
+            dispatch_routing_decision({"triggered_agents": ["music", "missing"]}, {"music": lambda: None})
 
     def test_renderer_strips_clip_audio_and_places_one_word_per_second(self):
         commands = []

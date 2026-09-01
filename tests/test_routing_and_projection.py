@@ -22,11 +22,11 @@ from shared.graph_projection import build_scene_edges  # noqa: E402
 
 
 class RoutingReasonTests(unittest.TestCase):
-    def test_location_route_keeps_trailer_after_storyboard_and_music(self):
+    def test_location_route_keeps_six_automatic_agents(self):
         route = _compute_triggered_agents("scene", {"location_id"})
-        self.assertEqual(route, ["budget", "location", "storyboard", "schedule", "music", "risk", "trailer"])
-        self.assertEqual(route.index("trailer") > route.index("storyboard"), True)
-        self.assertEqual(route.index("trailer") > route.index("music"), True)
+        self.assertEqual(route, ["budget", "location", "storyboard", "schedule", "music", "risk"])
+        self.assertNotIn("trailer", route)
+        self.assertLess(route.index("storyboard"), route.index("music"))
 
     def test_reason_is_returned_and_saved_in_routing_event(self):
         class FakeGraph:

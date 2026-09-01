@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 import time
 from typing import Callable
@@ -43,9 +44,9 @@ def generate_image_to_video(
 
     try:
         client = genai.Client(api_key=api_key)
-        image_bytes = Path(image_path).read_bytes()
-        suffix = Path(image_path).suffix.lower()
-        mime_type = "image/jpeg" if suffix in (".jpg", ".jpeg") else "image/png"
+        image_path = Path(image_path)
+        image_bytes = image_path.read_bytes()
+        mime_type = mimetypes.guess_type(image_path.name)[0] or "image/png"
         image_input = types.Image(image_bytes=image_bytes, mime_type=mime_type)
 
         operation = client.models.generate_videos(

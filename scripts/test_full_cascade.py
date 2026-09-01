@@ -47,7 +47,6 @@ from agents.storyboard.agent import generate_storyboard
 from agents.music.agent import generate_music_cue
 from agents.producer.agent import producer_overview
 from agents.explanation.agent import explain_change
-from agents.trailer.agent import generate_production_trailer
 
 
 def main():
@@ -182,7 +181,6 @@ def main():
         "schedule": lambda: reschedule_shoot("scene_005", cascade_id=cascade_id),
         "storyboard": lambda: generate_storyboard("scene_005", cascade_id=cascade_id),
         "music": lambda: generate_music_cue("scene_005", cascade_id=cascade_id),
-        "trailer": lambda: generate_production_trailer("scene_005", cascade_id=cascade_id),
         "director": lambda: print("Director output is already represented by the latest director note"),
         "casting": lambda: print("Casting output is already represented by the latest character sheets"),
         "producer": lambda: producer_overview("scene_005", cascade_id=cascade_id),
