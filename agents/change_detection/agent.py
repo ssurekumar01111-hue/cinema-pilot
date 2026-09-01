@@ -64,10 +64,10 @@ _ALWAYS = None  # Sentinel: trigger on any change to this entity type.
 
 TRIGGER_RULES: dict[str, list[tuple[set[str] | None, list[str]]]] = {
     "scene": [
-        ({"location_id"},    ["budget", "location", "storyboard", "schedule", "music", "risk", "trailer"]),
+        ({"location_id"},    ["budget", "location", "storyboard", "schedule", "music", "risk"]),
         ({"character_ids"},  ["casting", "budget"]),
-        ({"emotional_tone"}, ["director", "music", "trailer"]),
-        ({"camera_cues"},    ["director", "storyboard", "trailer"]),
+        ({"emotional_tone"}, ["director", "music"]),
+        ({"camera_cues"},    ["director", "storyboard"]),
     ],
     "location": [
         ({"cost_profile"},        ["budget"]),

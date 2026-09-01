@@ -34,8 +34,6 @@ Change Detection Agent  (diffs the graph, computes exactly which agents are affe
       │
       ├──► Budget      ├──► Location    ├──► Risk
       ├──► Schedule     ├──► Storyboard  ├──► Music
-      │                    │                 │
-      │                    └──────► Trailer Agent ───► Production trailer MP4
       │
       ▼
 Producer Agent  (synthesizes budget/schedule/risk into an overview)
@@ -44,9 +42,9 @@ Producer Agent  (synthesizes budget/schedule/risk into an overview)
 Explanation Agent  (pure synthesis of prior agents' reasoning into a plain-language narrative)
 ```
 
-**14 agents total:** Script Intelligence, Change Detection, Budget, Location, Risk, Schedule, Storyboard, Music, Trailer, Director, Casting, Voice, Producer, Explanation.
+**14 agents total:** Script Intelligence, Change Detection, Budget, Location, Risk, Schedule, Storyboard, Music, Director, Casting, Voice, Producer, Explanation, and Trailer (on-demand via dashboard).
 
-**Signature demo:** moving Scene 5 from an interior warehouse to an exterior beach location routes exactly 7 affected agents (not all 14) — Budget, Location, Storyboard, Schedule, Music, Risk and Trailer. Cost recalculation, risk assessment, rescheduling, refreshed assets and a traceable trailer fallback all sit in one causal audit log.
+**Signature demo:** moving Scene 5 from an interior warehouse to an exterior beach location routes exactly 6 affected agents (not all 14) — Budget, Location, Storyboard, Schedule, Music, and Risk. Cost recalculation, risk assessment, rescheduling, and refreshed assets cascade automatically, all traceable through one causal audit log. Trailer generation (Veo 3.1 video + Lyria audio) is available on demand from the dashboard.
 
 ## Grafana integration (partner track requirement)
 
@@ -140,7 +138,7 @@ python agents/script_intelligence/agent.py
 python scripts/test_full_cascade.py
 ```
 
-This resets Scene 5 to its original location, fires a single relocation event, and shows Change Detection routing exactly the 7 affected agents in sequence, followed by Producer and Explanation synthesizing the results — with the full causal audit trail printed at the end.
+This resets Scene 5 to its original location, fires a single relocation event, and shows Change Detection routing exactly the 6 affected agents in sequence, followed by Producer and Explanation synthesizing the results — with the full causal audit trail printed at the end.
 
 **Generate a production trailer from the dashboard:**
 ```
