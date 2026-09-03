@@ -42,7 +42,8 @@ def get_secret(
         return env_val.strip()
 
     # 2. GCP Secret Manager
-    proj = project_id or os.environ.get("GCP_PROJECT", DEFAULT_PROJECT)
+    raw_proj = project_id or os.environ.get("GCP_PROJECT", DEFAULT_PROJECT)
+    proj = raw_proj.split()[0].strip() if raw_proj else DEFAULT_PROJECT
     try:
         from google.cloud import secretmanager
 
@@ -53,8 +54,8 @@ def get_secret(
         if secret_value:
             return secret_value
     except Exception as exc:
-        logger.debug(
-            "Secret Manager lookup for '%s' in project '%s' bypassed or failed: %s",
+        logger.warning(
+            "Secret Manager lookup for '%s' in project '%s' failed: %s",
             secret_id,
             proj,
             exc,
