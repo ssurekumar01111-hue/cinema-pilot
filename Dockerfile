@@ -1,4 +1,4 @@
-﻿FROM python:3.13-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
@@ -14,11 +14,7 @@ COPY dashboard/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Dashboard dependencies and the isolated Trailer Agent runtime
-COPY shared/graph_client /app/shared/graph_client
-COPY shared/asset_storage /app/shared/asset_storage
-COPY shared/secret_client.py /app/shared/secret_client.py
-COPY shared/concept_trailer.py /app/shared/concept_trailer.py
-COPY shared/veo_client.py /app/shared/veo_client.py
+COPY shared /app/shared
 COPY agents/trailer /app/agents/trailer
 COPY dashboard /app/dashboard
 
