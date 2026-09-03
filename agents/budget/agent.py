@@ -68,11 +68,11 @@ Data Provided:
 Instructions:
 1. Provide a brief 2-3 sentence reasoning explaining the estimated cost.
    CRITICAL: Explicitly reference specific logistics factors from the Logistics Notes (such as permits, power constraints, or access windows) and location properties (location type, weather sensitivity, character/prop requirements) to justify the cost. Do NOT invent external details not provided above.
-2. Estimate the total location budget amount for filming this scene based on the base cost profile and logistics factors.
+2. Estimate the total location budget amount for filming this scene: calculate this as the Base Location Cost Profile plus a standard $1,000.00 logistics contingency if external site constraints (such as permits, power requirements, access windows, or weather sensitivity) are present; otherwise use the base cost profile.
 3. Return ONLY valid JSON matching this schema:
 {{
-  "estimated_cost": <float>,
-  "reasoning": <string, 2-3 sentences>
+  "reasoning": <string, 2-3 sentences>,
+  "estimated_cost": <float>
 }}
 """
 
