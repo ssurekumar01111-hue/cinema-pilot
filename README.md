@@ -1,6 +1,6 @@
 # CinemaPilot
 
-**An autonomous AI production office for film — every department represented by a collaborating agent.**
+**An autonomous AI production office for film — 14 Gemini and ADK agents representing every department.**
 
 Built for the [Agentic Cinema: The Blockbuster Hackathon](https://agentic-cinema.devpost.com/) — **Grafana partner track**.
 
@@ -34,6 +34,13 @@ Change Detection Agent  (diffs the graph, computes exactly which agents are affe
       │
       ├──► Budget      ├──► Location    ├──► Risk
       ├──► Schedule     ├──► Storyboard  ├──► Music
+      │                    │                 │
+      │                    └────────┬────────┘
+      │                             ▼
+      │                    Trailer Agent (on-demand: Veo 3.1 + Lyria 3 / ffmpeg fallback)
+      │                             │
+      │                             ▼
+      │                    Production Trailer MP4
       │
       ▼
 Producer Agent  (synthesizes budget/schedule/risk into an overview)
@@ -43,6 +50,25 @@ Explanation Agent  (pure synthesis of prior agents' reasoning into a plain-langu
 ```
 
 **14 agents total:** Script Intelligence, Change Detection, Budget, Location, Risk, Schedule, Storyboard, Music, Director, Casting, Voice, Producer, Explanation, and Trailer (on-demand via dashboard).
+
+### Agent roster (14 agents)
+
+| # | Agent | Role | Google Tech & Integration | Invocation |
+|---|---|---|---|---|
+| 1 | **Script Intelligence Agent** | Parses screenplay PDF/text and extracts structured entities (scenes, locations, characters, props) into the Production Graph | Gemini (`google-genai`) | Screenplay Ingestion |
+| 2 | **Change Detection Agent** | Diffs the graph and evaluates declarative trigger rules to route affected downstream departments | Python rule engine, BigQuery event sourcing | Cascade Trigger |
+| 3 | **Budget Agent** | Calculates scene and location line-item costs, handling relocations, prop costs, and contingency rules | Gemini (`google-genai`) | Cascade |
+| 4 | **Location Agent** | Evaluates location feasibility, logistics constraints, and queries live Grafana telemetry | Gemini (`google-genai`), Grafana MCP (`list_datasources`, `query_loki_logs`, Prometheus) | Cascade |
+| 5 | **Risk Agent** | Assesses production hazards, proposes mitigations, and escalates high risks to Grafana incidents | Gemini (`google-genai`), Grafana MCP (`create_incident`, `list_incidents`) | Cascade |
+| 6 | **Schedule Agent** | Determines shoot day indices, scene durations, and timeline constraints anchored to screenplay position | Gemini (`google-genai`) | Cascade |
+| 7 | **Storyboard Agent** | Generates visual storyboard panels grounded in camera cues, lighting, and scene emotional tone | `gemini-3.1-flash-image` (Gemini Developer API), Google Cloud Storage | Cascade |
+| 8 | **Music Agent** | Composes contextual musical score cues matched to emotional tone and scene pacing | Lyria 3 (`lyria-3-clip-preview` via Google GenAI), Google Cloud Storage | Cascade |
+| 9 | **Director Agent** | Produces creative shot guidance, camera blocking, and director pacing notes | Gemini (`google-genai`) | Direct / Cascade |
+| 10 | **Casting Agent** | Generates character breakdown sheets and wardrobe notes grounded in screenplay details | Gemini (`google-genai`) | Direct / Cascade |
+| 11 | **Voice Agent** | Generates multi-speaker dialogue audio previews grounded in character personas | Gemini (`google-genai`), Gemini TTS, Google Cloud Storage | Direct / Cascade |
+| 12 | **Producer Agent** | Synthesizes budget/schedule/risk health and enforces Grafana-backed production readiness gate | Gemini (`google-genai`), Grafana MCP (Incidents, Prometheus metrics) | Cascade Synthesis |
+| 13 | **Explanation Agent** | Synthesizes plain-language audit narratives explaining upstream agent reasoning to stakeholders | Gemini (`google-genai`) | Cascade Synthesis |
+| 14 | **Trailer Agent** | Assembles production teaser & concept trailers from storyboard panels and Lyria music cues | Veo 3.1 (`veo-3.1-generate-preview`), Lyria 3, ffmpeg fallback, Google Cloud Storage | On-Demand (Dashboard) |
 
 **Signature demo:** moving Scene 5 from an interior warehouse to an exterior beach location routes exactly 6 affected agents (not all 14) — Budget, Location, Storyboard, Schedule, Music, and Risk. Cost recalculation, risk assessment, rescheduling, and refreshed assets cascade automatically, all traceable through one causal audit log. Trailer generation (Veo 3.1 video + Lyria audio) is available on demand from the dashboard.
 
